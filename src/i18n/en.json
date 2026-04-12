@@ -1,0 +1,77 @@
+{
+  "app": {
+    "title": "Claude Session Manager",
+    "version": "v{version}"
+  },
+  "list": {
+    "name": "Name",
+    "description": "Description",
+    "project": "Project",
+    "lastActive": "Last Active",
+    "size": "Size",
+    "type": "Type",
+    "sessionId": "Session ID",
+    "noSessions": "No sessions found.",
+    "scanning": "Scanning sessions...",
+    "total": "{count} session(s) found"
+  },
+  "action": {
+    "select": "Select a session",
+    "resumeHere": "Resume in current terminal",
+    "resumeNew": "Resume in new terminal",
+    "viewDetails": "View details",
+    "rename": "Rename session",
+    "describe": "Edit description",
+    "delete": "Delete session",
+    "syncToCloud": "Upload to cloud",
+    "syncFromCloud": "Download from cloud",
+    "generateSummary": "Generate summary",
+    "newSession": "New session",
+    "back": "Back to list",
+    "quit": "Quit"
+  },
+  "prompt": {
+    "enterName": "Enter session name:",
+    "enterDescription": "Enter description:",
+    "confirmDelete": "Are you sure you want to delete this session?",
+    "selectAction": "What would you like to do?",
+    "selectTerminal": "Where to resume?",
+    "selectStorage": "Select storage location:"
+  },
+  "storage": {
+    "local": "Local",
+    "cloud": "Cloud",
+    "syncing": "Syncing...",
+    "uploaded": "Uploaded to cloud storage",
+    "downloaded": "Downloaded from cloud storage",
+    "checkingOut": "Checking out session from cloud...",
+    "checkingIn": "Checking in session to cloud..."
+  },
+  "gdrive": {
+    "setupTitle": "Cloud Storage Setup",
+    "setupInstructions": "Enter the path to your cloud-synced folder (Google Drive, OneDrive, Dropbox, etc.).",
+    "enterFolderPath": "Cloud folder path (e.g. G:\\My Drive, D:\\Dropbox):",
+    "folderNotFound": "Folder not found: {path}",
+    "setupComplete": "Cloud storage configured",
+    "notConfigured": "Cloud storage not configured. Run setup first."
+  },
+  "summary": {
+    "generating": "Generating summary...",
+    "generated": "Summary generated",
+    "failed": "Failed to generate summary",
+    "noApiKey": "ANTHROPIC_API_KEY not set. Cannot generate summaries."
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{n}m ago",
+    "hoursAgo": "{n}h ago",
+    "daysAgo": "{n}d ago",
+    "weeksAgo": "{n}w ago",
+    "monthsAgo": "{n}mo ago"
+  },
+  "error": {
+    "sessionNotFound": "Session not found",
+    "resumeFailed": "Failed to resume session: {error}",
+    "scanFailed": "Failed to scan sessions: {error}"
+  }
+}

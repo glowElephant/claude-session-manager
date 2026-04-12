@@ -1,0 +1,77 @@
+{
+  "app": {
+    "title": "Claude 세션 매니저",
+    "version": "v{version}"
+  },
+  "list": {
+    "name": "이름",
+    "description": "설명",
+    "project": "프로젝트",
+    "lastActive": "마지막 활동",
+    "size": "크기",
+    "type": "타입",
+    "sessionId": "세션 ID",
+    "noSessions": "세션을 찾을 수 없습니다.",
+    "scanning": "세션 스캔 중...",
+    "total": "총 {count}개 세션"
+  },
+  "action": {
+    "select": "세션을 선택하세요",
+    "resumeHere": "현재 터미널에서 이어하기",
+    "resumeNew": "새 터미널에서 열기",
+    "viewDetails": "상세 보기",
+    "rename": "이름 변경",
+    "describe": "설명 편집",
+    "delete": "세션 삭제",
+    "syncToCloud": "클라우드에 업로드",
+    "syncFromCloud": "클라우드에서 다운로드",
+    "generateSummary": "요약 생성",
+    "newSession": "새 세션",
+    "back": "목록으로 돌아가기",
+    "quit": "종료"
+  },
+  "prompt": {
+    "enterName": "세션 이름 입력:",
+    "enterDescription": "설명 입력:",
+    "confirmDelete": "이 세션을 삭제하시겠습니까?",
+    "selectAction": "무엇을 할까요?",
+    "selectTerminal": "어디서 실행할까요?",
+    "selectStorage": "저장 위치 선택:"
+  },
+  "storage": {
+    "local": "로컬",
+    "cloud": "클라우드",
+    "syncing": "동기화 중...",
+    "uploaded": "클라우드에 업로드 완료",
+    "downloaded": "클라우드에서 다운로드 완료",
+    "checkingOut": "클라우드에서 세션 체크아웃 중...",
+    "checkingIn": "클라우드에 세션 체크인 중..."
+  },
+  "gdrive": {
+    "setupTitle": "클라우드 저장소 설정",
+    "setupInstructions": "클라우드 동기화 폴더 경로를 입력하세요 (Google Drive, OneDrive, Dropbox 등).",
+    "enterFolderPath": "클라우드 폴더 경로 (예: G:\\My Drive, D:\\Dropbox):",
+    "folderNotFound": "폴더를 찾을 수 없습니다: {path}",
+    "setupComplete": "클라우드 저장소 설정 완료",
+    "notConfigured": "클라우드 저장소가 설정되지 않았습니다. 먼저 설정을 실행하세요."
+  },
+  "summary": {
+    "generating": "요약 생성 중...",
+    "generated": "요약 생성 완료",
+    "failed": "요약 생성 실패",
+    "noApiKey": "ANTHROPIC_API_KEY가 설정되지 않았습니다. 요약을 생성할 수 없습니다."
+  },
+  "time": {
+    "justNow": "방금",
+    "minutesAgo": "{n}분 전",
+    "hoursAgo": "{n}시간 전",
+    "daysAgo": "{n}일 전",
+    "weeksAgo": "{n}주 전",
+    "monthsAgo": "{n}개월 전"
+  },
+  "error": {
+    "sessionNotFound": "세션을 찾을 수 없습니다",
+    "resumeFailed": "세션 복원 실패: {error}",
+    "scanFailed": "세션 스캔 실패: {error}"
+  }
+}

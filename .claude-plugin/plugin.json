@@ -1,0 +1,5 @@
+{
+  "name": "claude-session-manager",
+  "description": "Session management skills for Claude Code — name, describe, and organize your sessions",
+  "version": "1.0.0"
+}

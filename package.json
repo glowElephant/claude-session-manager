@@ -1,0 +1,36 @@
+{
+  "name": "claude-session-manager",
+  "version": "1.0.0",
+  "description": "Terminal UI for managing Claude Code sessions — list, name, resume, and sync across devices via Google Drive",
+  "main": "src/index.js",
+  "bin": {
+    "csm": "bin/csm.js",
+    "csm-name": "bin/csm-name.js",
+    "csm-setup": "bin/csm-setup.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node bin/csm.js",
+    "dev": "node bin/csm.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "session-manager",
+    "tui",
+    "terminal",
+    "google-drive"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@inquirer/prompts": "^7.0.0",
+    "chalk": "^5.4.0",
+    "cli-table3": "^0.6.5",
+    "open": "^10.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
