@@ -60,13 +60,24 @@ function displaySessionTable(sessions) {
       chalk.cyan(t('list.size')),
       chalk.cyan(t('list.type')),
     ],
-    colWidths: [5, 18, 36, 20, 14, 10, 8],
+    colWidths: (() => {
+      const cols = process.stdout.columns || 120;
+      // Fixed columns: #(5) + lastActive(14) + size(10) + type(8) = 37
+      // Borders: 8 columns = 8 chars
+      const fixed = 37 + 8;
+      const remaining = Math.max(cols - fixed, 40);
+      const nameW = Math.max(Math.floor(remaining * 0.2), 10);
+      const descW = Math.max(Math.floor(remaining * 0.4), 16);
+      const projW = Math.max(Math.floor(remaining * 0.4), 10);
+      return [5, nameW, descW, projW, 14, 10, 8];
+    })(),
     wordWrap: true,
     style: { head: [], border: ['gray'] },
   });
 
+  const descMaxLen = (process.stdout.columns || 120) > 100 ? 34 : 20;
   sessions.forEach((s, i) => {
-    const desc = s.description || s.autoSummary || truncate(s.firstUserMessage, 34) || '-';
+    const desc = s.description || s.autoSummary || truncate(s.firstUserMessage, descMaxLen) || '-';
     const typeIcon = s.storageType === 'cloud' ? chalk.yellow('☁') : chalk.green('●');
     const typeName = s.storageType === 'cloud' ? 'Cloud' : t('storage.local');
 

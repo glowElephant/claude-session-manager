@@ -43,8 +43,8 @@ if (!skipShortcut) {
     }
 
     const batPath = join(desktop, 'Claude Session Manager.bat');
-    // Use csm global command — works regardless of install location
-    const batContent = '@echo off\r\ncmd /k csm';
+    // Set window size (130 cols x 35 rows) for table display, then run csm
+    const batContent = '@echo off\r\nmode con: cols=130 lines=35\r\ncmd /k csm';
     writeFileSync(batPath, batContent, 'utf-8');
     console.log(`✓ Desktop shortcut created: ${batPath}`);
 
