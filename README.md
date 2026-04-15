@@ -1,117 +1,52 @@
 # Claude Session Manager
 
-A terminal UI for managing [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions — list, name, resume, and sync across devices via Google Drive.
+A desktop app for managing [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions — list, name, resume, and sync across devices.
+
+Built with **Tauri 2 + React + TypeScript + Tailwind + shadcn/ui**. Modern dark theme, works on Windows, macOS, Linux.
+
+![dark UI](docs/screenshot.png)
 
 ## Features
 
-- **Session list** — View all Claude Code sessions with name, description, project, last activity, and size
-- **Quick resume** — Select a session and resume it in the current or a new terminal
-- **Name & describe** — Give sessions custom names and descriptions for easy identification
-- **Auto-summary** — Generate 1-line summaries using Claude Haiku (cached, only generated once)
-- **Google Drive sync** — Upload sessions to Google Drive and resume them from any machine (checkout/checkin pattern)
-- **i18n** — English and Korean UI localization with auto-detection
+- **Session list** — All sessions in `~/.claude/projects/` shown with name, description, project, last activity, size, storage type
+- **Search & filter** — Instant search across name / description / project / first message
+- **Quick resume** — Double-click a row or hit the action menu to open the session in a new terminal (Git Bash on Windows, Terminal on macOS, configurable on Linux)
+- **Rename / describe** — Custom names and descriptions persist to `~/.claude-sessions/config.json`
+- **Auto-summary** — 1-line summaries via Claude Haiku (cached — generated only once)
+- **Cloud sync** — Point at any cloud-synced folder (Google Drive / OneDrive / Dropbox / iCloud / …). Upload + checkout/checkin pattern keeps the source of truth in sync
+- **i18n** — English and Korean, auto-detected, overridable in Settings
 
-## Installation
+## Install from source
 
 ```bash
-# Clone and install globally
 git clone https://github.com/glowElephant/claude-session-manager.git
 cd claude-session-manager
-npm install
-npm link
+pnpm install
 
-# One-time setup: installs /session-name command + desktop shortcut
-csm-setup
+# Dev mode (hot reload, opens a window)
+pnpm tauri dev
+
+# Production build (OS-native installer)
+pnpm tauri build
 ```
 
-That's it. Works on Windows, macOS, and Linux.
+Installers land in `src-tauri/target/release/bundle/`:
 
-## Usage
+- Windows: `.msi` / `.exe`
+- macOS: `.dmg`
+- Linux: `.AppImage` / `.deb`
 
-```bash
-# Launch the session manager
-csm
+### Requirements
 
-# Force language
-csm --lang=en
-csm --lang=ko
-```
-
-### Session List
-
-When launched, the tool scans `~/.claude/projects/` for all session files and displays them in a table:
-
-```
-  Claude Session Manager v1.0.0
-
-┌─────┬──────────────────┬──────────────────────┬────────────┬──────────┬────────┬────────┐
-│  #  │ Name             │ Description          │ Project    │ Last     │ Size   │ Type   │
-├─────┼──────────────────┼──────────────────────┼────────────┼──────────┼────────┼────────┤
-│  1  │ auth-refactor    │ Refactoring auth ... │ C:/Git/app │ 2h ago   │ 1.2 MB │ ● Local│
-│  2  │ 3fa8c21e         │ GitHub follower ...  │ C:/Git     │ 1d ago   │ 143 KB │ ☁ GDri │
-└─────┴──────────────────┴──────────────────────┴────────────┴──────────┴────────┴────────┘
-```
-
-### Session Actions
-
-After selecting a session:
-
-- **Resume in current terminal** — Runs `claude --resume <id>` in place
-- **Resume in new terminal** — Opens a new terminal window with the session
-- **Rename** — Give the session a custom name
-- **Edit description** — Add or change the session description
-- **Generate summary** — Auto-generate a 1-line summary using Claude Haiku
-- **Upload to Google Drive** — Sync the session to the cloud
-
-### Claude Code Skill
-
-If you installed the plugin, the `/session-name` skill is available inside Claude Code:
-
-```
-/session-name my-feature
-/session-name auth-refactor | Refactoring auth middleware for compliance
-```
-
-## Google Drive Setup
-
-Google Drive sync allows you to resume sessions from any machine.
-
-### 1. Create Google Cloud Credentials
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a new project (or select existing)
-3. Navigate to **APIs & Services** → **Library**
-4. Search for and enable **Google Drive API**
-5. Go to **APIs & Services** → **Credentials**
-6. Click **Create Credentials** → **OAuth 2.0 Client ID**
-7. Select **Desktop App** as application type
-8. Download the credentials JSON file
-
-### 2. Configure in the Tool
-
-```bash
-# Option A: Run setup from the CLI
-csm --setup-gdrive
-
-# Option B: Use the Settings menu in the TUI
-# Select ⚙ Settings → ☁ Google Drive Setup
-```
-
-The setup will:
-1. Ask for your credentials JSON file path
-2. Open a browser for OAuth authorization
-3. Store tokens securely in `~/.claude-sessions/`
-
-### How Sync Works
-
-The tool uses a **checkout/checkin** pattern:
-
-1. **Upload** — Copies your local session JSONL + metadata to a `Claude Sessions` folder on Google Drive
-2. **Resume from cloud** — Downloads the session to local `~/.claude/projects/`, runs `claude --resume`, then uploads changes back when the session ends
+- **Node.js 18+** and **pnpm**
+- **Rust toolchain** (`rustup` — install via <https://rustup.rs>)
+- **Tauri 2** platform prerequisites (WebView2 on Windows, Xcode CLT on macOS, webkit2gtk on Linux) — see <https://v2.tauri.app/start/prerequisites/>
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on `PATH` — required to actually resume sessions
+- *(optional)* Anthropic API key in Settings — enables the auto-summary feature
 
 ## Configuration
 
-Config is stored at `~/.claude-sessions/config.json`:
+Stored at `~/.claude-sessions/config.json`:
 
 ```json
 {
@@ -119,31 +54,37 @@ Config is stored at `~/.claude-sessions/config.json`:
     "abc123-uuid": {
       "name": "my-feature",
       "description": "Working on the new auth flow",
-      "autoSummary": "Auth middleware refactoring for compliance",
+      "autoSummary": "Refactoring auth middleware for compliance",
       "storageType": "local",
-      "updatedAt": "2026-04-13T..."
+      "updatedAt": "2026-04-15T..."
     }
   },
   "settings": {
-    "locale": "auto"
+    "locale": "en",
+    "cloudPath": "G:/My Drive/Claude Sessions",
+    "anthropicApiKey": "sk-ant-..."
   }
 }
 ```
 
-## Environment Variables
+The API key is stored locally only; nothing is transmitted except the direct call to `api.anthropic.com` when you request a summary.
 
-| Variable | Description |
-|----------|-------------|
-| `ANTHROPIC_API_KEY` | Required for auto-summary generation (uses Claude Haiku) |
-| `CLAUDE_SESSION_LANG` | Override language detection (`en` or `ko`) |
+## Cloud sync — how it works
 
-## Requirements
+1. Open **Settings → Cloud folder → Browse** and pick any cloud-synced local folder (Google Drive desktop, OneDrive, Dropbox, etc.). A `Claude Sessions` subfolder is created there.
+2. From the action menu, **Upload to cloud** copies the session JSONL + a `.meta.json` sidecar into that folder. Your cloud app handles syncing.
+3. On another machine, install this app and point Settings at the same cloud folder. Uploaded sessions show up with the `cloud` badge.
+4. **Resume** on a cloud session auto-checks it out to local `~/.claude/projects/`, runs `claude --resume`, and you can check back in when done.
 
-- Node.js >= 18
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
-- (Optional) `ANTHROPIC_API_KEY` for auto-summary
-- (Optional) Google Cloud credentials for Drive sync
+No vendor-specific APIs, no OAuth. Works with any sync provider that mounts locally.
+
+## Architecture
+
+- `src-tauri/` — Rust backend (Tauri 2). Modules: `scanner`, `config`, `cloud`, `resume`, `summary`, `types`.
+- `src/` — React 19 + TypeScript frontend. Tailwind + shadcn-style components in `src/components/ui/`.
+- `src/i18n/` — `en.json`, `ko.json` translations.
+- IPC: frontend calls Rust via `invoke` (typed wrapper in `src/lib/ipc.ts`).
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).

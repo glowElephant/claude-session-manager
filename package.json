@@ -1,36 +1,41 @@
 {
   "name": "claude-session-manager",
-  "version": "1.0.0",
-  "description": "Terminal UI for managing Claude Code sessions — list, name, resume, and sync across devices via Google Drive",
-  "main": "src/index.js",
-  "bin": {
-    "csm": "bin/csm.js",
-    "csm-name": "bin/csm-name.js",
-    "csm-setup": "bin/csm-setup.js"
-  },
+  "private": true,
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "start": "node bin/csm.js",
-    "dev": "node bin/csm.js"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
-  "keywords": [
-    "claude",
-    "claude-code",
-    "session-manager",
-    "tui",
-    "terminal",
-    "google-drive"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "@inquirer/prompts": "^7.0.0",
-    "chalk": "^5.4.0",
-    "cli-table3": "^0.6.5",
-    "open": "^10.1.0"
+    "@radix-ui/react-dialog": "^1.1.6",
+    "@radix-ui/react-dropdown-menu": "^2.1.6",
+    "@radix-ui/react-label": "^2.1.2",
+    "@radix-ui/react-slot": "^1.1.2",
+    "@radix-ui/react-tooltip": "^1.1.8",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-shell": "^2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwind-merge": "^2.6.0"
   },
-  "engines": {
-    "node": ">=18.0.0"
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
   }
 }

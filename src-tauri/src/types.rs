@@ -1,0 +1,56 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMeta {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub auto_summary: Option<String>,
+    #[serde(default)]
+    pub storage_type: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
+    pub cloud_path: Option<String>,
+    #[serde(default)]
+    pub anthropic_api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Config {
+    #[serde(default)]
+    pub sessions: HashMap<String, SessionMeta>,
+    #[serde(default)]
+    pub settings: Settings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Session {
+    pub session_id: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub auto_summary: Option<String>,
+    pub project: String,
+    pub project_dir: String,
+    pub file_path: String,
+    pub size: u64,
+    pub total_lines: usize,
+    pub first_timestamp: Option<String>,
+    pub last_timestamp: Option<String>,
+    pub cwd: Option<String>,
+    pub version: Option<String>,
+    pub first_user_message: Option<String>,
+    pub storage_type: String,
+}
