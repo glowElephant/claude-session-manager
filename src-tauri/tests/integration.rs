@@ -278,12 +278,14 @@ fn make_term(kind: TerminalKind, program: &str) -> DetectedTerminal {
 
 #[test]
 fn build_command_windows_terminal_uses_new_tab_with_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    let cwd = dir.path().to_string_lossy().to_string();
     let term = make_term(TerminalKind::WindowsTerminal, "wt.exe");
-    let plan = terminal::build_resume_command(&term, "abc-123", Some("C:/Git"));
+    let plan = terminal::build_resume_command(&term, "abc-123", Some(&cwd));
     assert_eq!(plan.program, "wt.exe");
     assert!(plan.args.contains(&"new-tab".to_string()));
     assert!(plan.args.contains(&"-d".to_string()));
-    assert!(plan.args.contains(&"C:/Git".to_string()));
+    assert!(plan.args.contains(&cwd));
     assert!(plan.args.iter().any(|a| a.contains("claude --resume abc-123")));
 }
 
@@ -298,8 +300,10 @@ fn build_command_powershell_uses_set_location_and_noexit() {
 
 #[test]
 fn build_command_cmd_uses_slash_k() {
+    let dir = tempfile::tempdir().unwrap();
+    let cwd = dir.path().to_string_lossy().to_string();
     let term = make_term(TerminalKind::Cmd, "cmd");
-    let plan = terminal::build_resume_command(&term, "sid", Some("C:\\Git"));
+    let plan = terminal::build_resume_command(&term, "sid", Some(&cwd));
     assert_eq!(plan.args[0], "/k");
     assert!(plan.args[1].contains("cd /d"));
     assert!(plan.args[1].contains("claude --resume sid"));
