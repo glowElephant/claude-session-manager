@@ -7,7 +7,12 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
 pub fn claude_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(".claude")
+    let home = if let Ok(p) = std::env::var("CLAUDE_SESSION_HOME") {
+        PathBuf::from(p)
+    } else {
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+    };
+    home.join(".claude")
 }
 
 pub fn projects_dir() -> PathBuf {

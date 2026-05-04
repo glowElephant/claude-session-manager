@@ -1,9 +1,9 @@
-mod cloud;
-mod config;
-mod resume;
-mod scanner;
-mod summary;
-mod types;
+pub mod cloud;
+pub mod config;
+pub mod resume;
+pub mod scanner;
+pub mod summary;
+pub mod types;
 
 use crate::config::{
     delete_session_meta as cfg_delete_meta, load_config, update_settings, upsert_session_meta,
