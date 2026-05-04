@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [0.3.0] — 2026-05-04
 
 ### Added
 - **Multi-terminal support on Windows.** Auto-detects Git Bash, Windows Terminal (`wt.exe`), PowerShell (`pwsh`/`powershell`), and Command Prompt. Each terminal gets a tailored launch command (e.g. `wt new-tab -d <cwd> powershell -NoExit -Command claude --resume <id>`).
