@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Search, Settings as SettingsIcon } from "lucide-react";
+import { AlertTriangle, RefreshCw, Search, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SessionTable } from "@/components/SessionTable";
@@ -22,8 +22,15 @@ function App() {
   const [editMode, setEditMode] = useState<EditMode>(null);
   const [editTarget, setEditTarget] = useState<Session | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [claudeCliMissing, setClaudeCliMissing] = useState(false);
 
   const t = useMemo(() => createT(locale), [locale]);
+
+  useEffect(() => {
+    ipc.checkEnvironment().then((r) => {
+      setClaudeCliMissing(!r.claudeCliFound);
+    }).catch(() => {});
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -137,6 +144,26 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
+      {claudeCliMissing && (
+        <div className="flex items-center gap-2 border-b border-amber-500/40 bg-amber-500/10 px-5 py-2 text-xs text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            {(t("warning.claudeCliMissing") !== "warning.claudeCliMissing"
+              ? t("warning.claudeCliMissing")
+              : "Claude Code CLI not found on PATH. Resume actions won't work.")}
+          </span>
+          <a
+            href="https://docs.anthropic.com/en/docs/claude-code"
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-amber-200"
+          >
+            {(t("warning.claudeCliInstall") !== "warning.claudeCliInstall"
+              ? t("warning.claudeCliInstall")
+              : "Install guide")}
+          </a>
+        </div>
+      )}
       <header className="flex items-center gap-3 border-b border-border/60 px-5 py-3">
         <div className="flex flex-col">
           <h1 className="text-base font-semibold leading-tight">{t("app.title")}</h1>

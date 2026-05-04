@@ -73,5 +73,8 @@ pub fn update_settings(patch: Settings) -> Result<()> {
     if patch.anthropic_api_key.is_some() {
         cfg.settings.anthropic_api_key = patch.anthropic_api_key;
     }
+    if patch.preferred_terminal.is_some() {
+        cfg.settings.preferred_terminal = patch.preferred_terminal;
+    }
     save_config(&cfg)
 }

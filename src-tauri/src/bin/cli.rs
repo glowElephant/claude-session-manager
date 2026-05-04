@@ -1,4 +1,4 @@
-use claude_session_manager_lib::{config, resume, scanner, types::SessionMeta};
+use claude_session_manager_lib::{config, environment, resume, scanner, terminal, types::SessionMeta};
 use std::process::ExitCode;
 
 fn print_help() {
@@ -12,7 +12,9 @@ USAGE:\n  \
   session-cli delete-meta <session-id>          Remove saved metadata\n  \
   session-cli resume-plan <session-id> [cwd]    Print the resume command (no spawn)\n  \
   session-cli messages <file-path> [n]          Print first N user messages from a JSONL\n  \
-  session-cli paths                             Print resolved paths (config, projects)\n"
+  session-cli paths                             Print resolved paths (config, projects)\n  \
+  session-cli check-env                         Detect claude CLI + available terminals (JSON)\n  \
+  session-cli set-terminal <kind|none>          Set preferred terminal (git-bash|wt|powershell|cmd|terminal|none)\n"
     );
 }
 
@@ -80,6 +82,23 @@ fn main() -> ExitCode {
             let n: usize = args.get(2).map(|s| s.parse().unwrap_or(5)).unwrap_or(5);
             let msgs = scanner::get_session_messages(file, n)?;
             println!("{}", serde_json::to_string_pretty(&msgs)?);
+            Ok(())
+        }
+        "check-env" => {
+            let report = environment::check_environment();
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            Ok(())
+        }
+        "set-terminal" => {
+            let value = args.get(1).ok_or_else(|| anyhow::anyhow!("kind required (auto|git-bash|wt|powershell|cmd|terminal)"))?;
+            if value != "auto" && terminal::TerminalKind::parse(value).is_none() {
+                return Err(anyhow::anyhow!("unknown terminal kind: {}", value));
+            }
+            config::update_settings(claude_session_manager_lib::types::Settings {
+                preferred_terminal: Some(value.clone()),
+                ..Default::default()
+            })?;
+            println!("ok");
             Ok(())
         }
         "paths" => {

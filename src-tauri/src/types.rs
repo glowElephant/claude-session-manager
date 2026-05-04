@@ -25,6 +25,8 @@ pub struct Settings {
     pub cloud_path: Option<String>,
     #[serde(default)]
     pub anthropic_api_key: Option<String>,
+    #[serde(default)]
+    pub preferred_terminal: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

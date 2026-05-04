@@ -1,4 +1,8 @@
-use claude_session_manager_lib::{config, resume, scanner, types::SessionMeta};
+use claude_session_manager_lib::{
+    config, environment, resume, scanner, terminal,
+    terminal::{DetectedTerminal, TerminalKind},
+    types::SessionMeta,
+};
 use std::fs;
 use std::sync::Mutex;
 
@@ -89,12 +93,14 @@ fn settings_update_only_overwrites_provided_fields() {
         locale: Some("ko".into()),
         cloud_path: Some("/tmp/cloud".into()),
         anthropic_api_key: None,
+        preferred_terminal: None,
     })
     .unwrap();
     config::update_settings(claude_session_manager_lib::types::Settings {
         locale: Some("en".into()),
         cloud_path: None,
         anthropic_api_key: None,
+        preferred_terminal: None,
     })
     .unwrap();
     let cfg = config::load_config();
@@ -260,4 +266,73 @@ fn resume_plan_skips_cwd_if_path_missing() {
     let plan = resume::build_resume_plan("sid", Some("/definitely/not/here/xyz123"), "linux");
     let joined = plan.args.join(" ");
     assert!(!joined.contains("/definitely/not/here"), "missing path should be filtered");
+}
+
+fn make_term(kind: TerminalKind, program: &str) -> DetectedTerminal {
+    DetectedTerminal {
+        kind,
+        program: program.into(),
+        display_name: kind.display_name().into(),
+    }
+}
+
+#[test]
+fn build_command_windows_terminal_uses_new_tab_with_dir() {
+    let term = make_term(TerminalKind::WindowsTerminal, "wt.exe");
+    let plan = terminal::build_resume_command(&term, "abc-123", Some("C:/Git"));
+    assert_eq!(plan.program, "wt.exe");
+    assert!(plan.args.contains(&"new-tab".to_string()));
+    assert!(plan.args.contains(&"-d".to_string()));
+    assert!(plan.args.contains(&"C:/Git".to_string()));
+    assert!(plan.args.iter().any(|a| a.contains("claude --resume abc-123")));
+}
+
+#[test]
+fn build_command_powershell_uses_set_location_and_noexit() {
+    let term = make_term(TerminalKind::PowerShell, "powershell.exe");
+    let plan = terminal::build_resume_command(&term, "sid", None);
+    assert_eq!(plan.args[0], "-NoExit");
+    assert_eq!(plan.args[1], "-Command");
+    assert!(plan.args[2].contains("claude --resume sid"));
+}
+
+#[test]
+fn build_command_cmd_uses_slash_k() {
+    let term = make_term(TerminalKind::Cmd, "cmd");
+    let plan = terminal::build_resume_command(&term, "sid", Some("C:\\Git"));
+    assert_eq!(plan.args[0], "/k");
+    assert!(plan.args[1].contains("cd /d"));
+    assert!(plan.args[1].contains("claude --resume sid"));
+}
+
+#[test]
+fn terminal_kind_parse_aliases() {
+    assert_eq!(TerminalKind::parse("git-bash"), Some(TerminalKind::GitBash));
+    assert_eq!(TerminalKind::parse("gitbash"), Some(TerminalKind::GitBash));
+    assert_eq!(TerminalKind::parse("wt"), Some(TerminalKind::WindowsTerminal));
+    assert_eq!(TerminalKind::parse("windows-terminal"), Some(TerminalKind::WindowsTerminal));
+    assert_eq!(TerminalKind::parse("pwsh"), Some(TerminalKind::PowerShell));
+    assert_eq!(TerminalKind::parse("cmd"), Some(TerminalKind::Cmd));
+    assert_eq!(TerminalKind::parse("auto"), None);
+    assert_eq!(TerminalKind::parse("nonsense"), None);
+}
+
+#[test]
+fn settings_persist_preferred_terminal() {
+    let _h = setup_temp_home();
+    config::update_settings(claude_session_manager_lib::types::Settings {
+        preferred_terminal: Some("git-bash".into()),
+        ..Default::default()
+    })
+    .unwrap();
+    let cfg = config::load_config();
+    assert_eq!(cfg.settings.preferred_terminal.as_deref(), Some("git-bash"));
+}
+
+#[test]
+fn environment_check_returns_consistent_target() {
+    let report = environment::check_environment();
+    assert!(["windows", "macos", "linux"].contains(&report.target_os.as_str()));
+    // claude_cli_found must agree with claude_cli_path being Some/None
+    assert_eq!(report.claude_cli_found, report.claude_cli_path.is_some());
 }

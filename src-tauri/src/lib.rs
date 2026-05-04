@@ -1,8 +1,10 @@
 pub mod cloud;
 pub mod config;
+pub mod environment;
 pub mod resume;
 pub mod scanner;
 pub mod summary;
+pub mod terminal;
 pub mod types;
 
 use crate::config::{
@@ -75,6 +77,11 @@ fn resume_session(session_id: String, cwd: Option<String>) -> Result<(), String>
 }
 
 #[tauri::command]
+fn check_environment_cmd() -> environment::EnvironmentReport {
+    environment::check_environment()
+}
+
+#[tauri::command]
 async fn generate_summary_cmd(
     session_id: String,
     file_path: String,
@@ -118,6 +125,7 @@ pub fn run() {
             checkout_session,
             checkin_session,
             resume_session,
+            check_environment_cmd,
             generate_summary_cmd,
         ])
         .run(tauri::generate_context!())

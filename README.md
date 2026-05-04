@@ -15,6 +15,8 @@ Built with **Tauri 2 + React + TypeScript + Tailwind + shadcn/ui**. Modern dark 
 - **Auto-summary** — 1-line summaries via Claude Haiku (cached — generated only once)
 - **Cloud sync** — Point at any cloud-synced folder (Google Drive / OneDrive / Dropbox / iCloud / …). Upload + checkout/checkin pattern keeps the source of truth in sync
 - **i18n** — English and Korean, auto-detected, overridable in Settings (live switch — no restart)
+- **Multi-terminal support (Windows)** — auto-detects Git Bash, Windows Terminal, PowerShell, and cmd. Pick a default in Settings or let the app choose
+- **Environment diagnostics** — Settings → Run diagnostics shows which `claude` CLI / terminals were found and where
 
 ## Install
 
@@ -84,8 +86,26 @@ The API key is stored locally only; nothing is transmitted except the direct cal
 | Variable | Purpose |
 |---|---|
 | `CLAUDE_SESSION_HOME` | Override the home directory used to resolve `~/.claude/projects/` and `~/.claude-sessions/`. Used mainly by the test suite and CLI harness for isolated runs. |
-| `GIT_BASH` | Windows: explicit path to `git-bash.exe`. If unset, the app searches `%ProgramFiles%\Git`, `%ProgramFiles(x86)%\Git`, `%ProgramW6432%\Git`, `%LOCALAPPDATA%\Git`, and falls back to `cmd.exe`. |
+| `GIT_BASH` | Windows: explicit path to `git-bash.exe`. |
+| `WINDOWS_TERMINAL` | Windows: explicit path to `wt.exe`. |
 | `ANTHROPIC_API_KEY` | Used as a fallback for the auto-summary feature when the key is not set in Settings. |
+
+### Terminal selection (Windows)
+
+When you click **Open in new terminal**, the app picks a terminal in this order:
+
+1. The terminal explicitly chosen in **Settings → Preferred terminal**
+2. Otherwise, the first available among: Git Bash → Windows Terminal (`wt.exe`) → PowerShell (`pwsh.exe`/`powershell.exe`) → Command Prompt
+
+Each kind is searched via:
+- Explicit env var (`GIT_BASH` / `WINDOWS_TERMINAL`)
+- Standard install locations (`%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramW6432%`, `%LOCALAPPDATA%`)
+- `PATH`
+- OS-shipped fallback (e.g. `%SystemRoot%\System32\cmd.exe`)
+
+**Run Settings → Environment diagnostics** to see exactly what the app found on your machine.
+
+On macOS the app uses Terminal.app via `osascript`; on Linux it tries `x-terminal-emulator`, `gnome-terminal`, `konsole`, then `xterm`.
 
 ## Cloud sync — how it works
 
@@ -107,10 +127,12 @@ src-tauri/
 │   ├── scanner.rs          # ~/.claude/projects/ scanning + JSONL parsing
 │   ├── config.rs           # ~/.claude-sessions/config.json read/write
 │   ├── cloud.rs            # Cloud folder upload / checkout / checkin
-│   ├── resume.rs           # Build platform-specific terminal command
+│   ├── terminal.rs         # Terminal detection + per-terminal command builders
+│   ├── environment.rs      # Diagnostics: claude CLI + detected terminals
+│   ├── resume.rs           # Picks a terminal and spawns it
 │   ├── summary.rs          # Anthropic API call for auto-summary
 │   └── types.rs            # Session / Config / Settings structs
-├── tests/integration.rs    # 15 integration tests against tempfile-isolated home
+├── tests/integration.rs    # 21 integration tests against tempfile-isolated home
 └── Cargo.toml              # Two binaries: claude-session-manager (GUI) + session-cli
 
 src/
@@ -135,7 +157,7 @@ cd src-tauri
 cargo test --tests
 ```
 
-15 integration tests cover scanner JSONL parsing, config persistence, settings updates, and resume command construction across Windows / macOS / Linux. Tests use `CLAUDE_SESSION_HOME` to point at a `tempfile`-managed temp dir, so they never touch your real `~/.claude/`.
+21 integration tests cover scanner JSONL parsing, config persistence, settings updates, terminal detection / command building per kind (Git Bash / Windows Terminal / PowerShell / cmd / macOS Terminal / Linux), and the environment diagnostics report. Tests use `CLAUDE_SESSION_HOME` to point at a `tempfile`-managed temp dir, so they never touch your real `~/.claude/`.
 
 ### Headless CLI harness
 
@@ -164,6 +186,12 @@ cargo build --bin session-cli
 
 # Print current config.json contents
 ./target/debug/session-cli get-config
+
+# Detect claude CLI + available terminals as JSON
+./target/debug/session-cli check-env
+
+# Set the preferred terminal (auto / git-bash / wt / powershell / cmd / terminal)
+./target/debug/session-cli set-terminal wt
 ```
 
 Use it against an isolated home to avoid touching real config:

@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig, Session, SessionMeta, Settings } from "@/types";
+import type {
+  AppConfig,
+  EnvironmentReport,
+  Session,
+  SessionMeta,
+  Settings,
+} from "@/types";
 
 export const ipc = {
   listSessions: () => invoke<Session[]>("list_sessions"),
@@ -21,4 +27,5 @@ export const ipc = {
     invoke<void>("resume_session", { sessionId, cwd }),
   generateSummary: (sessionId: string, filePath: string) =>
     invoke<string>("generate_summary_cmd", { sessionId, filePath }),
+  checkEnvironment: () => invoke<EnvironmentReport>("check_environment_cmd"),
 };

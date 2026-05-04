@@ -73,5 +73,26 @@
     "sessionNotFound": "Session not found",
     "resumeFailed": "Failed to resume session: {error}",
     "scanFailed": "Failed to scan sessions: {error}"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "preferredTerminal": "Preferred terminal",
+    "preferredTerminalHelp": "Auto picks the first available terminal.",
+    "auto": "Auto",
+    "diagnostics": "Environment diagnostics",
+    "runDiagnostics": "Run diagnostics",
+    "running": "Running...",
+    "claudeCliFound": "Claude CLI: {path}",
+    "claudeCliMissing": "Claude CLI not found on PATH",
+    "claudeCliVersion": "version {version}",
+    "detectedTerminals": "Detected terminals",
+    "noTerminalsFound": "No terminals detected",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "warning": {
+    "claudeCliMissing": "Claude Code CLI not found on PATH. Resume actions won't work.",
+    "claudeCliInstall": "Install guide"
   }
 }
