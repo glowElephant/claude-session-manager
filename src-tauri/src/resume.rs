@@ -1,0 +1,58 @@
+use crate::config::load_config;
+use crate::terminal::{
+    build_resume_command, detect_all_terminals, pick_terminal, DetectedTerminal, ResumePlan,
+    TerminalKind,
+};
+use anyhow::{anyhow, Result};
+use std::process::Command;
+
+pub fn current_target_os() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    }
+}
+
+pub fn build_resume_plan(session_id: &str, cwd: Option<&str>, target_os: &str) -> ResumePlan {
+    let preferred = load_config().settings.preferred_terminal;
+    let term = pick_terminal(target_os, preferred.as_deref()).unwrap_or_else(|| {
+        // Pick a sensible non-detecting fallback so we still emit a plan even
+        // when no real terminal is installed (mostly relevant in tests).
+        let kind = match target_os {
+            "windows" => TerminalKind::Cmd,
+            "macos" => TerminalKind::MacTerminal,
+            _ => TerminalKind::LinuxDefault,
+        };
+        let program = match kind {
+            TerminalKind::Cmd => "cmd".to_string(),
+            TerminalKind::MacTerminal => "osascript".to_string(),
+            _ => "x-terminal-emulator".to_string(),
+        };
+        DetectedTerminal { kind, program, display_name: kind.display_name().into() }
+    });
+    build_resume_command(&term, session_id, cwd)
+}
+
+pub fn resume_in_new_terminal(session_id: &str, cwd: Option<&str>) -> Result<()> {
+    let target = current_target_os();
+    let plan = build_resume_plan(session_id, cwd, target);
+
+    if target == "linux" {
+        let detected = detect_all_terminals(target);
+        if detected.is_empty() {
+            for term in &["x-terminal-emulator", "gnome-terminal", "konsole", "xterm"] {
+                let args: Vec<&str> = plan.args.iter().map(|s| s.as_str()).collect();
+                if Command::new(term).args(&args).spawn().is_ok() {
+                    return Ok(());
+                }
+            }
+            return Err(anyhow!("no terminal emulator found"));
+        }
+    }
+
+    Command::new(&plan.program).args(&plan.args).spawn()?;
+    Ok(())
+}
