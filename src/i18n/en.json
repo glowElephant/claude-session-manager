@@ -11,6 +11,8 @@
     "size": "Size",
     "type": "Type",
     "sessionId": "Session ID",
+    "id": "ID",
+    "noName": "(no name)",
     "noSessions": "No sessions found.",
     "scanning": "Scanning sessions...",
     "total": "{count} session(s) found"
@@ -25,7 +27,7 @@
     "delete": "Delete session",
     "syncToCloud": "Upload to cloud",
     "syncFromCloud": "Download from cloud",
-    "generateSummary": "Generate summary",
+    "generateSummary": "Regenerate summary",
     "newSession": "New session",
     "back": "Back to list",
     "quit": "Quit"

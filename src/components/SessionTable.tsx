@@ -1,5 +1,5 @@
-import { memo } from "react";
-import { Cloud, HardDrive, MoreHorizontal } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Cloud, HardDrive, MoreHorizontal, Star } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -32,6 +32,113 @@ interface Props {
   onDelete: (s: Session) => void;
   onToggleCloud: (s: Session) => void;
   onGenerateSummary: (s: Session) => void;
+  onToggleFavorite: (s: Session) => void;
+}
+
+type ColKey =
+  | "star"
+  | "name"
+  | "id"
+  | "desc"
+  | "project"
+  | "lastActive"
+  | "size"
+  | "type"
+  | "actions";
+
+const DEFAULTS: Record<ColKey, number> = {
+  star: 36,
+  name: 180,
+  id: 100,
+  desc: 360,
+  project: 220,
+  lastActive: 120,
+  size: 90,
+  type: 70,
+  actions: 44,
+};
+
+const MIN_WIDTH: Record<ColKey, number> = {
+  star: 36,
+  name: 80,
+  id: 60,
+  desc: 120,
+  project: 100,
+  lastActive: 80,
+  size: 70,
+  type: 60,
+  actions: 44,
+};
+
+const STORAGE_KEY = "csm.colWidths.v1";
+
+function loadWidths(): Record<ColKey, number> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULTS, ...parsed };
+    }
+  } catch {}
+  return { ...DEFAULTS };
+}
+
+function ResizableHead({
+  colKey,
+  width,
+  onResize,
+  className,
+  children,
+}: {
+  colKey: ColKey;
+  width: number;
+  onResize: (key: ColKey, w: number) => void;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  const startX = useRef(0);
+  const startW = useRef(0);
+  const dragging = useRef(false);
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragging.current = true;
+      startX.current = e.clientX;
+      startW.current = width;
+      (e.target as Element).setPointerCapture(e.pointerId);
+
+      const move = (ev: PointerEvent) => {
+        if (!dragging.current) return;
+        const delta = ev.clientX - startX.current;
+        const next = Math.max(MIN_WIDTH[colKey], startW.current + delta);
+        onResize(colKey, next);
+      };
+      const up = () => {
+        dragging.current = false;
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    },
+    [colKey, width, onResize]
+  );
+
+  return (
+    <TableHead
+      style={{ width, minWidth: width, maxWidth: width }}
+      className={cn("relative select-none", className)}
+    >
+      <div className="truncate pr-2">{children}</div>
+      <div
+        onPointerDown={onPointerDown}
+        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 active:bg-primary/60"
+        aria-label={`Resize ${colKey}`}
+      />
+    </TableHead>
+  );
 }
 
 function SessionTableInner({
@@ -46,7 +153,20 @@ function SessionTableInner({
   onDelete,
   onToggleCloud,
   onGenerateSummary,
+  onToggleFavorite,
 }: Props) {
+  const [widths, setWidths] = useState<Record<ColKey, number>>(() => loadWidths());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(widths));
+    } catch {}
+  }, [widths]);
+
+  const handleResize = useCallback((key: ColKey, w: number) => {
+    setWidths((prev) => ({ ...prev, [key]: w }));
+  }, []);
+
   if (sessions.length === 0) {
     return (
       <div className="flex h-60 items-center justify-center text-sm text-muted-foreground">
@@ -55,24 +175,51 @@ function SessionTableInner({
     );
   }
 
+  const cellStyle = (key: ColKey): React.CSSProperties => ({
+    width: widths[key],
+    minWidth: widths[key],
+    maxWidth: widths[key],
+  });
+
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[200px]">{t("list.name")}</TableHead>
-          <TableHead>{t("list.description")}</TableHead>
-          <TableHead className="w-[220px]">{t("list.project")}</TableHead>
-          <TableHead className="w-[120px]">{t("list.lastActive")}</TableHead>
-          <TableHead className="w-[90px] text-right">{t("list.size")}</TableHead>
-          <TableHead className="w-[70px]">{t("list.type")}</TableHead>
-          <TableHead className="w-[44px]"></TableHead>
+          <ResizableHead colKey="star" width={widths.star} onResize={handleResize} />
+          <ResizableHead colKey="name" width={widths.name} onResize={handleResize}>
+            {t("list.name")}
+          </ResizableHead>
+          <ResizableHead colKey="id" width={widths.id} onResize={handleResize}>
+            {t("list.id")}
+          </ResizableHead>
+          <ResizableHead colKey="desc" width={widths.desc} onResize={handleResize}>
+            {t("list.description")}
+          </ResizableHead>
+          <ResizableHead colKey="project" width={widths.project} onResize={handleResize}>
+            {t("list.project")}
+          </ResizableHead>
+          <ResizableHead colKey="lastActive" width={widths.lastActive} onResize={handleResize}>
+            {t("list.lastActive")}
+          </ResizableHead>
+          <ResizableHead
+            colKey="size"
+            width={widths.size}
+            onResize={handleResize}
+            className="text-right"
+          >
+            {t("list.size")}
+          </ResizableHead>
+          <ResizableHead colKey="type" width={widths.type} onResize={handleResize}>
+            {t("list.type")}
+          </ResizableHead>
+          <TableHead
+            style={{ width: widths.actions, minWidth: widths.actions, maxWidth: widths.actions }}
+          />
         </TableRow>
       </TableHeader>
       <TableBody>
         {sessions.map((s) => {
           const selected = selectedId === s.sessionId;
-          const label =
-            s.name || s.sessionId.slice(0, 8);
           const desc = s.description || s.autoSummary || s.firstUserMessage || "";
           return (
             <TableRow
@@ -82,33 +229,63 @@ function SessionTableInner({
               onDoubleClick={() => onResume(s)}
               className="cursor-pointer"
             >
-              <TableCell>
-                <div className="flex flex-col">
-                  <span className={cn("font-medium", !s.name && "text-muted-foreground font-mono text-xs")}>
-                    {label}
+              <TableCell style={cellStyle("star")} onClick={(e) => e.stopPropagation()} className="pr-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => onToggleFavorite(s)}
+                  aria-label={s.favorite ? "Unstar" : "Star"}
+                >
+                  <Star
+                    className={cn(
+                      "h-4 w-4",
+                      s.favorite
+                        ? "fill-amber-400 text-amber-400"
+                        : "text-muted-foreground/40"
+                    )}
+                  />
+                </Button>
+              </TableCell>
+              <TableCell style={cellStyle("name")} title={s.name || undefined}>
+                {s.name ? (
+                  <span className="block truncate font-medium">{s.name}</span>
+                ) : (
+                  <span className="text-sm italic text-muted-foreground/60">
+                    {t("list.noName")}
                   </span>
-                  {s.name && (
-                    <span className="font-mono text-[10px] text-muted-foreground/70">
-                      {s.sessionId.slice(0, 8)}
-                    </span>
-                  )}
-                </div>
+                )}
               </TableCell>
-              <TableCell className="max-w-[360px]">
-                <span className="line-clamp-1 text-sm text-foreground/80">{desc || "—"}</span>
+              <TableCell style={cellStyle("id")} title={s.sessionId}>
+                <span className="block truncate font-mono text-xs text-muted-foreground/80">
+                  {s.sessionId.slice(0, 8)}
+                </span>
               </TableCell>
-              <TableCell>
-                <span className="font-mono text-xs text-muted-foreground line-clamp-1">
+              <TableCell style={cellStyle("desc")} title={desc || undefined}>
+                <span className="block truncate text-sm text-foreground/80">{desc || "—"}</span>
+              </TableCell>
+              <TableCell style={cellStyle("project")} title={s.project}>
+                <span className="block truncate font-mono text-xs text-muted-foreground">
                   {s.project}
                 </span>
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {s.lastTimestamp ? formatRelativeTime(s.lastTimestamp, locale) : "—"}
+              <TableCell
+                style={cellStyle("lastActive")}
+                className="text-sm text-muted-foreground"
+                title={s.lastTimestamp || undefined}
+              >
+                <span className="block truncate">
+                  {s.lastTimestamp ? formatRelativeTime(s.lastTimestamp, locale) : "—"}
+                </span>
               </TableCell>
-              <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+              <TableCell
+                style={cellStyle("size")}
+                className="text-right tabular-nums text-sm text-muted-foreground"
+                title={`${s.size} bytes`}
+              >
                 {formatBytes(s.size)}
               </TableCell>
-              <TableCell>
+              <TableCell style={cellStyle("type")}>
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                   {s.storageType === "cloud" ? (
                     <>
@@ -123,7 +300,10 @@ function SessionTableInner({
                   )}
                 </span>
               </TableCell>
-              <TableCell onClick={(e) => e.stopPropagation()}>
+              <TableCell
+                style={cellStyle("actions")}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8">

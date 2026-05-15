@@ -112,41 +112,115 @@ fn decode_project_name(dir: &str) -> String {
 }
 
 pub fn scan_local_sessions() -> Result<Vec<Session>> {
+    use std::io::Write;
     let mut out = Vec::new();
     let root = projects_dir();
+
+    let log_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".claude-sessions")
+        .join("scan-debug.log");
+    if let Some(parent) = log_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let mut log = fs::File::create(&log_path).ok();
+    let ts = chrono::Utc::now().to_rfc3339();
+    if let Some(f) = log.as_mut() {
+        let _ = writeln!(f, "=== scan_local_sessions @ {} ===", ts);
+        let _ = writeln!(f, "projects_dir = {}", root.display());
+        let _ = writeln!(f, "projects_dir.exists = {}", root.exists());
+    }
+
     if !root.exists() {
         return Ok(out);
     }
     let saved = load_config().sessions;
 
+    let mut total_found = 0usize;
+    let mut total_pushed = 0usize;
+    let mut meta_fail = 0usize;
+    let mut stem_fail = 0usize;
+    let mut stat_fail = 0usize;
+
     for entry in fs::read_dir(&root)? {
-        let Ok(entry) = entry else { continue };
+        let Ok(entry) = entry else {
+            if let Some(f) = log.as_mut() {
+                let _ = writeln!(f, "[ERR] read_dir entry failed in projects_dir");
+            }
+            continue;
+        };
         let project_path = entry.path();
         if !project_path.is_dir() {
             continue;
         }
         let project_dir = entry.file_name().to_string_lossy().to_string();
+        // 자동 요약용 격리 cwd에서 만들어진 jsonl은 목록에서 제외 (무한루프 방지)
+        if project_dir.contains(crate::summary::ISOLATION_MARKER) {
+            if let Some(f) = log.as_mut() {
+                let _ = writeln!(f, "[skip-isolation] {}", project_dir);
+            }
+            continue;
+        }
 
-        let Ok(files) = fs::read_dir(&project_path) else { continue };
+        let files = match fs::read_dir(&project_path) {
+            Ok(f) => f,
+            Err(e) => {
+                if let Some(f) = log.as_mut() {
+                    let _ = writeln!(f, "[ERR] read_dir({}) failed: {}", project_dir, e);
+                }
+                continue;
+            }
+        };
+
+        let mut per_proj_found = 0usize;
+        let mut per_proj_pushed = 0usize;
         for file in files {
             let Ok(file) = file else { continue };
             let path = file.path();
             if path.extension().and_then(|s| s.to_str()) != Some("jsonl") {
                 continue;
             }
-            let Ok(stat) = fs::metadata(&path) else { continue };
+            per_proj_found += 1;
+            total_found += 1;
+            let stat = match fs::metadata(&path) {
+                Ok(s) => s,
+                Err(e) => {
+                    stat_fail += 1;
+                    if let Some(f) = log.as_mut() {
+                        let _ = writeln!(f, "[SKIP stat] {}: {}", path.display(), e);
+                    }
+                    continue;
+                }
+            };
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()).map(String::from) else {
+                stem_fail += 1;
+                if let Some(f) = log.as_mut() {
+                    let _ = writeln!(f, "[SKIP stem] {}", path.display());
+                }
                 continue;
             };
 
-            let meta = read_jsonl_meta(&path).ok();
+            let meta = match read_jsonl_meta(&path) {
+                Ok(m) => Some(m),
+                Err(e) => {
+                    meta_fail += 1;
+                    if let Some(f) = log.as_mut() {
+                        let _ = writeln!(f, "[meta-fail] {}: {}", path.display(), e);
+                    }
+                    None
+                }
+            };
             let saved_meta = saved.get(&stem).cloned().unwrap_or_default();
+            let favorite = saved_meta.favorite.unwrap_or(false);
 
+            per_proj_pushed += 1;
+            total_pushed += 1;
             out.push(Session {
                 session_id: stem,
                 name: saved_meta.name,
                 description: saved_meta.description,
                 auto_summary: saved_meta.auto_summary,
+                favorite,
                 project: decode_project_name(&project_dir),
                 project_dir: project_dir.clone(),
                 file_path: path.to_string_lossy().to_string(),
@@ -158,14 +232,38 @@ pub fn scan_local_sessions() -> Result<Vec<Session>> {
                 version: meta.as_ref().and_then(|m| m.version.clone()),
                 first_user_message: meta.as_ref().and_then(|m| m.first_user_message.clone()),
                 storage_type: saved_meta.storage_type.unwrap_or_else(|| "local".into()),
+                locked_by: None,
             });
+        }
+
+        if let Some(f) = log.as_mut() {
+            let _ = writeln!(
+                f,
+                "[proj] {:>4} found / {:>4} pushed  -- {}",
+                per_proj_found, per_proj_pushed, project_dir
+            );
         }
     }
 
+    if let Some(f) = log.as_mut() {
+        let _ = writeln!(f, "---");
+        let _ = writeln!(f, "TOTAL found  = {}", total_found);
+        let _ = writeln!(f, "TOTAL pushed = {}", total_pushed);
+        let _ = writeln!(f, "stat_fail    = {}", stat_fail);
+        let _ = writeln!(f, "stem_fail    = {}", stem_fail);
+        let _ = writeln!(f, "meta_fail    = {}", meta_fail);
+        let _ = writeln!(f, "out.len()    = {} (returned to frontend)", out.len());
+    }
+
     out.sort_by(|a, b| {
-        let ta = a.last_timestamp.as_deref().unwrap_or("");
-        let tb = b.last_timestamp.as_deref().unwrap_or("");
-        tb.cmp(ta)
+        match b.favorite.cmp(&a.favorite) {
+            std::cmp::Ordering::Equal => {
+                let ta = a.last_timestamp.as_deref().unwrap_or("");
+                let tb = b.last_timestamp.as_deref().unwrap_or("");
+                tb.cmp(ta)
+            }
+            other => other,
+        }
     });
 
     Ok(out)

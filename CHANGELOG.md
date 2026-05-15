@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented here.
 
+## [0.4.0] — 2026-05-15
+
+### Added
+- **즐겨찾기 토글** — 별 아이콘 클릭으로 즐겨찾기 지정. 목록 최상단 고정 정렬.
+- **이름/ID 분리 표시** — 이름 컬럼과 ID 컬럼이 별도. 이름 비어있으면 "이름 없음" 표시.
+- **자동 요약 백그라운드 워커** — `claude -p --model claude-haiku-4-5` subprocess로 헤드리스 호출하여 빈 description 세션을 1배치(5개)씩 자동 요약. 시작 시 자동 실행, 한 건 완료할 때마다 `auto-summary-progress` 이벤트로 UI 자동 갱신.
+- **배치 요약** — 세션 5개를 한 호출에 묶어 처리. wake-up 비용 줄여 세션당 평균 ~12초 → ~5초.
+- **요약 격리 폴더** — `~/.claude-sessions/.summary-runs/`에서 claude 호출하여 새 세션 jsonl이 만들어져도 무한 요약 루프에 빠지지 않도록 scanner가 skip 처리.
+- **재생성 모드** — 메뉴 "요약 재생성" 클릭 시 이전 요약을 프롬프트 hint로 넣어 다른 관점으로 다시 요약.
+- **resume 플래그** — 설정창에서 `--dangerously-skip-permissions`, `--debug`, `--verbose` 체크박스 + 자유 입력란. 실시간 미리보기 표시.
+- **Custom 터미널** — `preferredTerminal: "custom"` + `customTerminalProgram` + `customTerminalArgs` (`{cwd}`, `{id}`, `{flags}`, `{claude_invoke}` 토큰 치환).
+- **클라우드 동기화 자동 폴더 감지** — Google Drive 데스크탑 클라이언트의 마운트 위치 자동 탐지 (Backup&Sync, Drive for Desktop 가상 드라이브, macOS CloudStorage). 설정창에 "자동 연결" 버튼 한 번으로 끝.
+- **single source of truth 동기화** — 업로드 후 로컬 jsonl 자동 삭제. 클라우드에만 본체 유지. 다른 PC에서 checkout → 작업 → checkin 흐름.
+- **락 파일 메커니즘** — 클라우드 폴더에 `<id>.lock` 두어 동시 편집 방지. hostname + acquired_at 기록. 다른 PC가 락 잡고 있으면 checkout 시 에러로 알림.
+- **컬럼 폭 드래그 조절** — 헤더 셀 우측 핸들 드래그로 폭 조절. `localStorage`에 저장되어 재실행 시 유지.
+- **호버 툴팁** — 잘린 셀(이름·설명·프로젝트·ID·시각·크기)에 마우스 호버 시 전체 내용 표시.
+
+### Changed
+- **요약 모델을 Anthropic API 직접 호출에서 `claude -p` subprocess로 교체**. API 키 입력 불필요 — claude CLI가 이미 인증돼 있으면 그대로 활용.
+- **`description`과 `autoSummary` 의미 분리** — 자동 생성된 내용은 `autoSummary`에만 저장. `description`은 사용자 수동 편집 시에만 채움. 상세 패널은 두 값이 같으면 한 번만 표시.
+- **이름 자동 생성** — 자동 요약과 함께 12자 이내 짧은 제목도 생성.
+- **세션 정렬 키** — 즐겨찾기 우선 → 그 다음 last_timestamp 내림차순.
+- 설정창에서 Anthropic API 키 입력란 제거 (이제 claude CLI 자체 인증 사용).
+
+### Fixed
+- 자동 요약 호출이 만든 jsonl로 인한 무한 재요약 루프 (격리 폴더 + scanner skip 패턴으로 차단).
+
+### New CLI commands (`session-cli`)
+- `set-favorite <id> <0|1>` — 즐겨찾기 토글
+- `auto-summarize <id>` — 단일 세션 자동 요약
+- `auto-summarize-batch [N]` — 빈 description 세션 N개 일괄 처리
+- `detect-gdrive` — Google Drive 폴더 감지 결과 JSON
+- `connect-gdrive` — Google Drive 자동 연결
+- `upload <id>` / `checkout <id>` / `checkin <id>` — 클라우드 동기화 흐름
+
 ## [0.3.0] — 2026-05-04
 
 ### Added

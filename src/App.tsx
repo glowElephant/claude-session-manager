@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { AlertTriangle, RefreshCw, Search, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,20 @@ function App() {
   useEffect(() => {
     ipc.checkEnvironment().then((r) => {
       setClaudeCliMissing(!r.claudeCliFound);
+      // claude CLI 있을 때만 자동 요약 워커 시작
+      if (r.claudeCliFound) {
+        ipc.startAutoSummary().catch(() => {});
+      }
     }).catch(() => {});
+
+    // 자동 요약 진행될 때마다 목록 새로고침
+    const unlisten = listen<string>("auto-summary-progress", () => {
+      refresh();
+    });
+    return () => {
+      unlisten.then((fn) => fn()).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refresh = useCallback(async () => {
@@ -118,6 +132,18 @@ function App() {
   async function handleGenerateSummary(s: Session) {
     try {
       await ipc.generateSummary(s.sessionId, s.filePath);
+      await refresh();
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
+  async function handleToggleFavorite(s: Session) {
+    setSessions((prev) =>
+      prev.map((x) => (x.sessionId === s.sessionId ? { ...x, favorite: !x.favorite } : x))
+    );
+    try {
+      await ipc.saveSessionMeta(s.sessionId, { favorite: !s.favorite });
       await refresh();
     } catch (err) {
       alert(String(err));
@@ -215,6 +241,7 @@ function App() {
             onDelete={handleDelete}
             onToggleCloud={handleToggleCloud}
             onGenerateSummary={handleGenerateSummary}
+            onToggleFavorite={handleToggleFavorite}
           />
         </section>
         <aside className="w-[380px] shrink-0 border-l border-border/60 bg-card/30">

@@ -92,15 +92,12 @@ fn settings_update_only_overwrites_provided_fields() {
     config::update_settings(claude_session_manager_lib::types::Settings {
         locale: Some("ko".into()),
         cloud_path: Some("/tmp/cloud".into()),
-        anthropic_api_key: None,
-        preferred_terminal: None,
+        ..Default::default()
     })
     .unwrap();
     config::update_settings(claude_session_manager_lib::types::Settings {
         locale: Some("en".into()),
-        cloud_path: None,
-        anthropic_api_key: None,
-        preferred_terminal: None,
+        ..Default::default()
     })
     .unwrap();
     let cfg = config::load_config();
@@ -281,7 +278,7 @@ fn build_command_windows_terminal_uses_new_tab_with_dir() {
     let dir = tempfile::tempdir().unwrap();
     let cwd = dir.path().to_string_lossy().to_string();
     let term = make_term(TerminalKind::WindowsTerminal, "wt.exe");
-    let plan = terminal::build_resume_command(&term, "abc-123", Some(&cwd));
+    let plan = terminal::build_resume_command(&term, "abc-123", Some(&cwd), None);
     assert_eq!(plan.program, "wt.exe");
     assert!(plan.args.contains(&"new-tab".to_string()));
     assert!(plan.args.contains(&"-d".to_string()));
@@ -292,7 +289,7 @@ fn build_command_windows_terminal_uses_new_tab_with_dir() {
 #[test]
 fn build_command_powershell_uses_set_location_and_noexit() {
     let term = make_term(TerminalKind::PowerShell, "powershell.exe");
-    let plan = terminal::build_resume_command(&term, "sid", None);
+    let plan = terminal::build_resume_command(&term, "sid", None, None);
     assert_eq!(plan.args[0], "-NoExit");
     assert_eq!(plan.args[1], "-Command");
     assert!(plan.args[2].contains("claude --resume sid"));
@@ -303,7 +300,7 @@ fn build_command_cmd_uses_slash_k() {
     let dir = tempfile::tempdir().unwrap();
     let cwd = dir.path().to_string_lossy().to_string();
     let term = make_term(TerminalKind::Cmd, "cmd");
-    let plan = terminal::build_resume_command(&term, "sid", Some(&cwd));
+    let plan = terminal::build_resume_command(&term, "sid", Some(&cwd), None);
     assert_eq!(plan.args[0], "/k");
     assert!(plan.args[1].contains("cd /d"));
     assert!(plan.args[1].contains("claude --resume sid"));

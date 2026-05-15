@@ -54,9 +54,14 @@ export function SessionDetail({ session, locale, t, onResume }: Props) {
         {session.description && (
           <Field label={t("list.description")} value={session.description} />
         )}
-        {session.autoSummary && (
-          <Field label={t("action.generateSummary")} value={session.autoSummary} />
-        )}
+        {session.autoSummary &&
+          session.autoSummary !== session.description &&
+          !session.autoSummary.startsWith("(") && (
+            <Field
+              label={locale === "ko" ? "자동 요약" : "Auto summary"}
+              value={session.autoSummary}
+            />
+          )}
         <Field label={t("list.project")} value={session.project} mono />
         {session.cwd && <Field label="cwd" value={session.cwd} mono />}
         {session.version && <Field label="version" value={session.version} mono />}

@@ -14,6 +14,8 @@ pub struct SessionMeta {
     pub storage_type: Option<String>,
     #[serde(default)]
     pub updated_at: Option<String>,
+    #[serde(default)]
+    pub favorite: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -27,6 +29,12 @@ pub struct Settings {
     pub anthropic_api_key: Option<String>,
     #[serde(default)]
     pub preferred_terminal: Option<String>,
+    #[serde(default)]
+    pub resume_flags: Option<String>,
+    #[serde(default)]
+    pub custom_terminal_program: Option<String>,
+    #[serde(default)]
+    pub custom_terminal_args: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -55,4 +63,8 @@ pub struct Session {
     pub version: Option<String>,
     pub first_user_message: Option<String>,
     pub storage_type: String,
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked_by: Option<String>,
 }

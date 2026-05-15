@@ -30,6 +30,7 @@ const ALL_TERMINAL_OPTIONS: Array<{ value: "auto" | TerminalKind; labelKey: stri
   { value: "powershell", labelKey: "", defaultLabel: "PowerShell" },
   { value: "cmd", labelKey: "", defaultLabel: "Command Prompt" },
   { value: "terminal", labelKey: "", defaultLabel: "Terminal.app" },
+  { value: "custom", labelKey: "", defaultLabel: "Custom..." },
 ];
 
 function tx(t: Props["t"], key: string, fallback: string) {
@@ -40,8 +41,36 @@ function tx(t: Props["t"], key: string, fallback: string) {
 export function SettingsDialog({ open, current, locale, t, onClose, onSaved }: Props) {
   const [chosenLocale, setChosenLocale] = useState<string>(locale);
   const [cloudPath, setCloudPath] = useState<string>(current.cloudPath || "");
-  const [apiKey, setApiKey] = useState<string>(current.anthropicApiKey || "");
   const [terminal, setTerminal] = useState<string>(current.preferredTerminal || "auto");
+  const [flagBypass, setFlagBypass] = useState<boolean>(false);
+  const [flagDebug, setFlagDebug] = useState<boolean>(false);
+  const [flagVerbose, setFlagVerbose] = useState<boolean>(false);
+  const [extraFlags, setExtraFlags] = useState<string>("");
+  const [customProgram, setCustomProgram] = useState<string>(current.customTerminalProgram || "");
+  const [customArgs, setCustomArgs] = useState<string>(current.customTerminalArgs || "");
+
+  function parseFlags(raw: string): { bypass: boolean; debug: boolean; verbose: boolean; extra: string } {
+    const tokens = raw.trim().split(/\s+/).filter(Boolean);
+    let bypass = false, debug = false, verbose = false;
+    const rest: string[] = [];
+    for (const tk of tokens) {
+      if (tk === "--dangerously-skip-permissions") bypass = true;
+      else if (tk === "--debug") debug = true;
+      else if (tk === "--verbose") verbose = true;
+      else rest.push(tk);
+    }
+    return { bypass, debug, verbose, extra: rest.join(" ") };
+  }
+
+  function composeFlags(): string {
+    const parts: string[] = [];
+    if (flagBypass) parts.push("--dangerously-skip-permissions");
+    if (flagDebug) parts.push("--debug");
+    if (flagVerbose) parts.push("--verbose");
+    const tail = extraFlags.trim();
+    if (tail) parts.push(tail);
+    return parts.join(" ");
+  }
   const [report, setReport] = useState<EnvironmentReport | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
 
@@ -49,8 +78,14 @@ export function SettingsDialog({ open, current, locale, t, onClose, onSaved }: P
     if (open) {
       setChosenLocale(current.locale || locale);
       setCloudPath(current.cloudPath || "");
-      setApiKey(current.anthropicApiKey || "");
       setTerminal(current.preferredTerminal || "auto");
+      const parsed = parseFlags(current.resumeFlags || "");
+      setFlagBypass(parsed.bypass);
+      setFlagDebug(parsed.debug);
+      setFlagVerbose(parsed.verbose);
+      setExtraFlags(parsed.extra);
+      setCustomProgram(current.customTerminalProgram || "");
+      setCustomArgs(current.customTerminalArgs || "");
       setReport(null);
     }
   }, [open, current, locale]);
@@ -60,6 +95,15 @@ export function SettingsDialog({ open, current, locale, t, onClose, onSaved }: P
     if (typeof result === "string") {
       const saved = await ipc.setCloudFolder(result);
       setCloudPath(saved);
+    }
+  }
+
+  async function autoConnectGoogleDrive() {
+    try {
+      const saved = await ipc.connectGoogleDrive();
+      setCloudPath(saved);
+    } catch (err) {
+      alert(String(err));
     }
   }
 
@@ -80,8 +124,10 @@ export function SettingsDialog({ open, current, locale, t, onClose, onSaved }: P
     await ipc.saveSettings({
       locale: chosenLocale,
       cloudPath: cloudPath || null,
-      anthropicApiKey: apiKey || null,
       preferredTerminal: terminal,
+      resumeFlags: composeFlags() || null,
+      customTerminalProgram: customProgram || null,
+      customTerminalArgs: customArgs || null,
     });
     onSaved();
     onClose();
@@ -140,32 +186,123 @@ export function SettingsDialog({ open, current, locale, t, onClose, onSaved }: P
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label>{tx(t, "gdrive.setupTitle", "Cloud folder")}</Label>
-            <div className="flex gap-2">
-              <Input
-                value={cloudPath}
-                onChange={(e) => setCloudPath(e.target.value)}
-                placeholder="G:/My Drive/Claude Sessions"
-                readOnly
-              />
-              <Button variant="outline" onClick={pickFolder}>Browse</Button>
+          {terminal === "custom" && (
+            <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+              <Label>Custom terminal</Label>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">Program (exe path)</span>
+                <Input
+                  value={customProgram}
+                  onChange={(e) => setCustomProgram(e.target.value)}
+                  placeholder='C:\Program Files\Git\usr\bin\mintty.exe'
+                />
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">
+                  Args template — tokens: <code>{`{cwd}`}</code>, <code>{`{id}`}</code>, <code>{`{flags}`}</code>, <code>{`{claude_invoke}`}</code>
+                </span>
+                <Input
+                  value={customArgs}
+                  onChange={(e) => setCustomArgs(e.target.value)}
+                  placeholder='-e bash -c "cd {cwd} && {claude_invoke}; exec bash"'
+                />
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Any cloud-synced folder (Google Drive, OneDrive, Dropbox…)
+          )}
+
+          <div className="space-y-3">
+            <Label>Resume options</Label>
+            <p className="text-xs text-muted-foreground -mt-1">
+              세션 실행 시 <code>claude</code>에 전달되는 시작 플래그. 실행 후 변경 불가한 옵션만 노출.
             </p>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={flagBypass}
+                onChange={(e) => setFlagBypass(e.target.checked)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium">
+                  Skip permissions <span className="font-mono text-xs text-muted-foreground">--dangerously-skip-permissions</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  모든 도구 사용 권한 확인을 건너뜀(bypass 모드). 신뢰하는 작업만 켜기.
+                </div>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={flagDebug}
+                onChange={(e) => setFlagDebug(e.target.checked)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium">
+                  Debug <span className="font-mono text-xs text-muted-foreground">--debug</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  내부 디버그 로그 출력. 문제 진단용.
+                </div>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={flagVerbose}
+                onChange={(e) => setFlagVerbose(e.target.checked)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium">
+                  Verbose <span className="font-mono text-xs text-muted-foreground">--verbose</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  상세 출력. 도구 호출/응답이 더 자세히 표시됨.
+                </div>
+              </div>
+            </label>
+
+            <div className="space-y-1 pt-1">
+              <span className="text-xs text-muted-foreground">
+                Additional flags (자유 입력 — <code>--mcp-config</code>, <code>--allowedTools</code> 등 특수 케이스용)
+              </span>
+              <Input
+                value={extraFlags}
+                onChange={(e) => setExtraFlags(e.target.value)}
+                placeholder="--mcp-config /path/to/mcp.json"
+              />
+            </div>
+
+            <div className="rounded bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+              <span className="text-foreground/70">미리보기:</span>{" "}
+              claude {composeFlags() || <span className="italic">(플래그 없음)</span>} --resume &lt;id&gt;
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Anthropic API Key</Label>
-            <Input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-ant-..."
-            />
+            <Label>Google Drive 동기화</Label>
+            <div className="flex gap-2">
+              <Input
+                value={cloudPath}
+                placeholder="아직 연결되지 않음"
+                readOnly
+              />
+              <Button variant="default" onClick={autoConnectGoogleDrive}>
+                자동 연결
+              </Button>
+              <Button variant="outline" onClick={pickFolder}>
+                직접 선택
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Used to generate one-line session summaries via Claude Haiku.
+              Google Drive 데스크탑 클라이언트가 설치돼 있으면 [자동 연결] 한 번으로 끝.
+              세션은 <code>{`<드라이브>/Claude Sessions/`}</code>에 저장됩니다.
+              업로드 후 로컬 jsonl은 자동 삭제(단일 본체 원칙).
             </p>
           </div>
 

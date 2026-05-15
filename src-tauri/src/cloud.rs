@@ -8,6 +8,82 @@ use std::path::PathBuf;
 
 const CLOUD_FOLDER: &str = "Claude Sessions";
 
+/// Google Drive 데스크탑 클라이언트의 로컬 마운트 폴더를 탐지한다.
+/// 검사 우선순위:
+/// 1. 환경변수 GOOGLE_DRIVE_PATH
+/// 2. `%USERPROFILE%\Google Drive\My Drive` (구버전 Backup&Sync)
+/// 3. Drive for desktop의 가상 드라이브 (G:\My Drive, H:\My Drive ...)
+/// 4. macOS: ~/Library/CloudStorage/GoogleDrive-*/My Drive
+pub fn detect_google_drive() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("GOOGLE_DRIVE_PATH") {
+        let pb = PathBuf::from(&p);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+
+    let home = dirs::home_dir()?;
+
+    // Windows Backup & Sync
+    let legacy = home.join("Google Drive").join("My Drive");
+    if legacy.exists() {
+        return Some(legacy);
+    }
+    let legacy2 = home.join("Google Drive");
+    if legacy2.exists() && legacy2.is_dir() {
+        return Some(legacy2);
+    }
+
+    // Windows Drive for desktop 가상 드라이브 (G:, H:, ...)
+    #[cfg(target_os = "windows")]
+    {
+        for letter in ['G', 'H', 'I', 'J', 'K', 'L'] {
+            let p = PathBuf::from(format!("{}:\\My Drive", letter));
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+
+    // macOS Drive for desktop
+    #[cfg(target_os = "macos")]
+    {
+        let cloud_storage = home.join("Library").join("CloudStorage");
+        if cloud_storage.exists() {
+            if let Ok(entries) = fs::read_dir(&cloud_storage) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with("GoogleDrive-") {
+                        let mydrive = entry.path().join("My Drive");
+                        if mydrive.exists() {
+                            return Some(mydrive);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudDetectResult {
+    pub found: bool,
+    pub path: Option<String>,
+}
+
+pub fn detect_google_drive_result() -> CloudDetectResult {
+    match detect_google_drive() {
+        Some(p) => CloudDetectResult {
+            found: true,
+            path: Some(p.to_string_lossy().to_string()),
+        },
+        None => CloudDetectResult { found: false, path: None },
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CloudMeta {
@@ -59,6 +135,12 @@ pub fn upload_session(s: &Session) -> Result<()> {
         serde_json::to_string_pretty(&meta)?,
     )?;
 
+    // 단일 본체 원칙: 업로드 끝나면 로컬 jsonl 삭제
+    let local = PathBuf::from(&s.file_path);
+    if local.exists() {
+        let _ = fs::remove_file(&local);
+    }
+
     upsert_session_meta(
         &s.session_id,
         SessionMeta {
@@ -66,6 +148,69 @@ pub fn upload_session(s: &Session) -> Result<()> {
             ..Default::default()
         },
     )?;
+    Ok(())
+}
+
+// === 락 파일 메커니즘 ===
+// 클라우드에 `<id>.lock` 파일을 두어 동시 편집을 방지.
+// 락 본문: { hostname, acquired_at } JSON
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LockInfo {
+    pub hostname: String,
+    pub acquired_at: String,
+}
+
+fn lock_path(cloud: &PathBuf, session_id: &str) -> PathBuf {
+    cloud.join(format!("{}.lock", session_id))
+}
+
+fn machine_id() -> String {
+    std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "unknown".to_string())
+}
+
+pub fn read_lock(session_id: &str) -> Option<LockInfo> {
+    let cloud = cloud_path()?;
+    let path = lock_path(&cloud, session_id);
+    if !path.exists() {
+        return None;
+    }
+    let body = fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&body).ok()
+}
+
+pub fn acquire_lock(session_id: &str) -> Result<()> {
+    let cloud = cloud_path().ok_or_else(|| anyhow!("cloud not configured"))?;
+    fs::create_dir_all(&cloud)?;
+    let path = lock_path(&cloud, session_id);
+    let me = machine_id();
+    if let Some(existing) = read_lock(session_id) {
+        if existing.hostname != me {
+            return Err(anyhow!(
+                "이 세션은 다른 PC '{}'에서 사용 중 (락 시각: {})",
+                existing.hostname,
+                existing.acquired_at
+            ));
+        }
+        // 같은 PC면 락 재획득 허용
+    }
+    let info = LockInfo {
+        hostname: me,
+        acquired_at: chrono::Utc::now().to_rfc3339(),
+    };
+    fs::write(&path, serde_json::to_string_pretty(&info)?)?;
+    Ok(())
+}
+
+pub fn release_lock(session_id: &str) -> Result<()> {
+    let Some(cloud) = cloud_path() else { return Ok(()) };
+    let path = lock_path(&cloud, session_id);
+    if path.exists() {
+        let _ = fs::remove_file(&path);
+    }
     Ok(())
 }
 
@@ -86,6 +231,8 @@ pub fn list_cloud_sessions() -> Result<Vec<Session>> {
         let Ok(meta) = serde_json::from_str::<CloudMeta>(&body) else { continue };
         let jsonl = cloud.join(format!("{}.jsonl", meta.session_id));
         let stat = fs::metadata(&jsonl).ok();
+        let lock = read_lock(&meta.session_id);
+        let locked_by = lock.map(|l| l.hostname);
         out.push(Session {
             session_id: meta.session_id.clone(),
             name: meta.name,
@@ -102,6 +249,8 @@ pub fn list_cloud_sessions() -> Result<Vec<Session>> {
             version: None,
             first_user_message: None,
             storage_type: "cloud".into(),
+            favorite: false,
+            locked_by,
         });
     }
     Ok(out)
@@ -113,6 +262,9 @@ pub fn checkout(session: &Session) -> Result<String> {
     if !src.exists() {
         return Err(anyhow!("session not found in cloud"));
     }
+    // 락 획득 (다른 PC에서 사용 중이면 실패)
+    acquire_lock(&session.session_id)?;
+
     let local_dir = projects_dir().join(&session.project_dir);
     fs::create_dir_all(&local_dir)?;
     let dest = local_dir.join(format!("{}.jsonl", session.session_id));
@@ -122,12 +274,19 @@ pub fn checkout(session: &Session) -> Result<String> {
 
 pub fn checkin(session: &Session) -> Result<()> {
     let Some(cloud) = cloud_path() else { return Ok(()) };
-    let src = PathBuf::from(&session.file_path);
-    if !src.exists() {
-        return Ok(());
+
+    // 로컬 jsonl 위치 — session.file_path는 클라우드 경로일 수도 있으니
+    // projects_dir 기준으로 다시 계산
+    let local_path = projects_dir()
+        .join(&session.project_dir)
+        .join(format!("{}.jsonl", session.session_id));
+
+    if local_path.exists() {
+        let dest = cloud.join(format!("{}.jsonl", session.session_id));
+        fs::copy(&local_path, &dest)?;
+        // 로컬 본체 삭제 (single source of truth)
+        let _ = fs::remove_file(&local_path);
     }
-    let dest = cloud.join(format!("{}.jsonl", session.session_id));
-    fs::copy(&src, &dest)?;
 
     let meta_path = cloud.join(format!("{}.meta.json", session.session_id));
     if meta_path.exists() {
@@ -143,5 +302,8 @@ pub fn checkin(session: &Session) -> Result<()> {
             fs::write(&meta_path, serde_json::to_string_pretty(&meta)?)?;
         }
     }
+
+    // 락 해제
+    let _ = release_lock(&session.session_id);
     Ok(())
 }

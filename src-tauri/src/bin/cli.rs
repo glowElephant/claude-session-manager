@@ -1,4 +1,4 @@
-use claude_session_manager_lib::{config, environment, resume, scanner, terminal, types::SessionMeta};
+use claude_session_manager_lib::{cloud, config, environment, resume, scanner, summary, terminal, types::SessionMeta};
 use std::process::ExitCode;
 
 fn print_help() {
@@ -10,9 +10,16 @@ USAGE:\n  \
   session-cli set-name <session-id> <name>      Save a name for a session\n  \
   session-cli set-desc <session-id> <desc>      Save a description\n  \
   session-cli delete-meta <session-id>          Remove saved metadata\n  \
+  session-cli set-favorite <session-id> <0|1>   Toggle favorite flag\n  \
+  session-cli auto-summarize <session-id>       Generate name+desc via claude -p (also saves)\n  \
   session-cli resume-plan <session-id> [cwd]    Print the resume command (no spawn)\n  \
   session-cli messages <file-path> [n]          Print first N user messages from a JSONL\n  \
   session-cli paths                             Print resolved paths (config, projects)\n  \
+  session-cli detect-gdrive                     Detect Google Drive folder\n  \
+  session-cli connect-gdrive                    Auto-connect Google Drive as cloud folder\n  \
+  session-cli upload <session-id>               Upload session to cloud (deletes local)\n  \
+  session-cli checkout <session-id>             Download from cloud to local + acquire lock\n  \
+  session-cli checkin <session-id>              Re-upload local + release lock + delete local\n  \
   session-cli check-env                         Detect claude CLI + available terminals (JSON)\n  \
   session-cli set-terminal <kind|none>          Set preferred terminal (git-bash|wt|powershell|cmd|terminal|none)\n"
     );
@@ -59,6 +66,74 @@ fn main() -> ExitCode {
             println!("ok");
             Ok(())
         }
+        "auto-summarize-batch" => {
+            // 빈 description 세션 5개 골라서 배치 호출
+            let n: usize = args.get(1).map(|s| s.parse().unwrap_or(5)).unwrap_or(5);
+            let sessions = scanner::scan_local_sessions()?;
+            let pending: Vec<(String, String)> = sessions
+                .into_iter()
+                .filter(|s| {
+                    s.description.as_deref().unwrap_or("").is_empty()
+                        && s.auto_summary.as_deref().unwrap_or("").is_empty()
+                })
+                .take(n)
+                .map(|s| (s.session_id, s.file_path))
+                .collect();
+            eprintln!("배치 대상 {}개", pending.len());
+            for (id, _) in &pending {
+                eprintln!("  - {}", &id[..8]);
+            }
+            let result = summary::auto_summarize_batch(&pending)?;
+            for (id, _) in &pending {
+                if let Some((name, desc)) = result.get(id) {
+                    config::upsert_session_meta(
+                        id,
+                        SessionMeta {
+                            name: Some(name.clone()),
+                            auto_summary: Some(desc.clone()),
+                            ..Default::default()
+                        },
+                    )?;
+                }
+            }
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            Ok(())
+        }
+        "auto-summarize" => {
+            let id = args.get(1).ok_or_else(|| anyhow::anyhow!("session-id required"))?;
+            // file_path 찾기
+            let sessions = scanner::scan_local_sessions()?;
+            let s = sessions
+                .iter()
+                .find(|s| s.session_id == *id)
+                .ok_or_else(|| anyhow::anyhow!("session not found: {}", id))?;
+            let prev = s.description.clone().or(s.auto_summary.clone());
+            let (name, desc) = summary::auto_summarize_session(&s.file_path, prev.as_deref())?;
+            config::upsert_session_meta(
+                id,
+                SessionMeta {
+                    name: Some(name.clone()),
+                    auto_summary: Some(desc.clone()),
+                    ..Default::default()
+                },
+            )?;
+            println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                "name": name,
+                "description": desc,
+            }))?);
+            Ok(())
+        }
+        "set-favorite" => {
+            let id = args.get(1).ok_or_else(|| anyhow::anyhow!("session-id required"))?;
+            let flag = args.get(2).map(|s| s.as_str()).unwrap_or("1");
+            let val = matches!(flag, "1" | "true" | "yes" | "on");
+            config::upsert_session_meta(
+                id,
+                SessionMeta { favorite: Some(val), ..Default::default() },
+            )?;
+            println!("ok");
+            Ok(())
+        }
         "resume-plan" => {
             let id = args.get(1).ok_or_else(|| anyhow::anyhow!("session-id required"))?;
             let cwd = args.get(2).map(|s| s.as_str());
@@ -99,6 +174,52 @@ fn main() -> ExitCode {
                 ..Default::default()
             })?;
             println!("ok");
+            Ok(())
+        }
+        "detect-gdrive" => {
+            let r = cloud::detect_google_drive_result();
+            println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
+        "connect-gdrive" => {
+            let p = cloud::detect_google_drive()
+                .ok_or_else(|| anyhow::anyhow!("Google Drive 폴더를 찾지 못함"))?;
+            let folder = cloud::set_cloud_root(&p.to_string_lossy())?;
+            println!("connected: {}", folder.display());
+            Ok(())
+        }
+        "upload" => {
+            let id = args.get(1).ok_or_else(|| anyhow::anyhow!("session-id required"))?;
+            let sessions = scanner::scan_local_sessions()?;
+            let s = sessions
+                .iter()
+                .find(|s| s.session_id == *id)
+                .ok_or_else(|| anyhow::anyhow!("session not found: {}", id))?;
+            cloud::upload_session(s)?;
+            println!("uploaded: {}", id);
+            Ok(())
+        }
+        "checkout" => {
+            let id = args.get(1).ok_or_else(|| anyhow::anyhow!("session-id required"))?;
+            let sessions = cloud::list_cloud_sessions()?;
+            let s = sessions
+                .iter()
+                .find(|s| s.session_id == *id)
+                .ok_or_else(|| anyhow::anyhow!("cloud session not found: {}", id))?;
+            let path = cloud::checkout(s)?;
+            println!("checked out to: {}", path);
+            Ok(())
+        }
+        "checkin" => {
+            let id = args.get(1).ok_or_else(|| anyhow::anyhow!("session-id required"))?;
+            // 로컬 또는 클라우드 메타에서 정보 가져오기
+            let cloud_list = cloud::list_cloud_sessions()?;
+            let s = cloud_list
+                .iter()
+                .find(|s| s.session_id == *id)
+                .ok_or_else(|| anyhow::anyhow!("cloud session not found: {}", id))?;
+            cloud::checkin(s)?;
+            println!("checked in: {}", id);
             Ok(())
         }
         "paths" => {

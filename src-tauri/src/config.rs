@@ -52,6 +52,9 @@ pub fn upsert_session_meta(session_id: &str, patch: SessionMeta) -> Result<()> {
     if patch.storage_type.is_some() {
         entry.storage_type = patch.storage_type;
     }
+    if patch.favorite.is_some() {
+        entry.favorite = patch.favorite;
+    }
     entry.updated_at = Some(chrono::Utc::now().to_rfc3339());
     save_config(&cfg)
 }
@@ -75,6 +78,15 @@ pub fn update_settings(patch: Settings) -> Result<()> {
     }
     if patch.preferred_terminal.is_some() {
         cfg.settings.preferred_terminal = patch.preferred_terminal;
+    }
+    if patch.resume_flags.is_some() {
+        cfg.settings.resume_flags = patch.resume_flags;
+    }
+    if patch.custom_terminal_program.is_some() {
+        cfg.settings.custom_terminal_program = patch.custom_terminal_program;
+    }
+    if patch.custom_terminal_args.is_some() {
+        cfg.settings.custom_terminal_args = patch.custom_terminal_args;
     }
     save_config(&cfg)
 }

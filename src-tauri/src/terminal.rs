@@ -15,6 +15,8 @@ pub enum TerminalKind {
     MacTerminal,
     #[serde(rename = "linux-default")]
     LinuxDefault,
+    #[serde(rename = "custom")]
+    Custom,
 }
 
 impl TerminalKind {
@@ -26,6 +28,7 @@ impl TerminalKind {
             "cmd" => Some(Self::Cmd),
             "terminal" | "mac-terminal" => Some(Self::MacTerminal),
             "linux-default" => Some(Self::LinuxDefault),
+            "custom" => Some(Self::Custom),
             _ => None,
         }
     }
@@ -38,6 +41,7 @@ impl TerminalKind {
             Self::Cmd => "Command Prompt",
             Self::MacTerminal => "Terminal.app",
             Self::LinuxDefault => "Default terminal",
+            Self::Custom => "Custom",
         }
     }
 }
@@ -202,14 +206,20 @@ pub fn build_resume_command(
     term: &DetectedTerminal,
     session_id: &str,
     cwd: Option<&str>,
+    flags: Option<&str>,
 ) -> ResumePlan {
     let work_dir = cwd.filter(|p| Path::new(p).exists());
+    let flags_str = flags.map(|s| s.trim()).filter(|s| !s.is_empty());
+    let claude_invoke = match flags_str {
+        Some(f) => format!("claude {} --resume {}", f, session_id),
+        None => format!("claude --resume {}", session_id),
+    };
     match term.kind {
         TerminalKind::GitBash => {
             let cd = work_dir
                 .map(|p| format!("cd '{}' && ", p.replace('\\', "/")))
                 .unwrap_or_default();
-            let cmd = format!("{}claude --resume {}; exec bash", cd, session_id);
+            let cmd = format!("{}{}; exec bash", cd, claude_invoke);
             ResumePlan { program: term.program.clone(), args: vec!["-c".into(), cmd] }
         }
         TerminalKind::WindowsTerminal => {
@@ -222,14 +232,14 @@ pub fn build_resume_command(
             args.push("powershell".into());
             args.push("-NoExit".into());
             args.push("-Command".into());
-            args.push(format!("claude --resume {}", session_id));
+            args.push(claude_invoke.clone());
             ResumePlan { program: term.program.clone(), args }
         }
         TerminalKind::PowerShell => {
             let cd = work_dir
                 .map(|p| format!("Set-Location -LiteralPath '{}'; ", p.replace('\'', "''")))
                 .unwrap_or_default();
-            let cmd = format!("{}claude --resume {}", cd, session_id);
+            let cmd = format!("{}{}", cd, claude_invoke);
             ResumePlan {
                 program: term.program.clone(),
                 args: vec!["-NoExit".into(), "-Command".into(), cmd],
@@ -239,7 +249,7 @@ pub fn build_resume_command(
             let cd = work_dir
                 .map(|p| format!("cd /d \"{}\" && ", p))
                 .unwrap_or_default();
-            let inner = format!("{}claude --resume {}", cd, session_id);
+            let inner = format!("{}{}", cd, claude_invoke);
             ResumePlan {
                 program: term.program.clone(),
                 args: vec!["/k".into(), inner],
@@ -250,8 +260,8 @@ pub fn build_resume_command(
                 .map(|p| format!("cd \\\"{}\\\" && ", p))
                 .unwrap_or_default();
             let script = format!(
-                "tell application \"Terminal\" to do script \"{}claude --resume {}\"",
-                cd, session_id
+                "tell application \"Terminal\" to do script \"{}{}\"",
+                cd, claude_invoke
             );
             ResumePlan {
                 program: term.program.clone(),
@@ -260,11 +270,74 @@ pub fn build_resume_command(
         }
         TerminalKind::LinuxDefault => {
             let cd = work_dir.map(|p| format!("cd '{}' && ", p)).unwrap_or_default();
-            let cmd = format!("{}claude --resume {}; exec bash", cd, session_id);
+            let cmd = format!("{}{}; exec bash", cd, claude_invoke);
             ResumePlan {
                 program: term.program.clone(),
                 args: vec!["-e".into(), "bash".into(), "-c".into(), cmd],
             }
         }
+        TerminalKind::Custom => {
+            // term.program이 사용자가 지정한 실행 파일
+            // term.display_name 자리에 args 템플릿 저장(아래 resume.rs에서 채움)
+            // 여기서는 fallthrough — resume.rs가 Custom일 때 별도 처리하므로 여긴 도달 안 함
+            ResumePlan {
+                program: term.program.clone(),
+                args: vec![claude_invoke],
+            }
+        }
     }
+}
+
+/// Custom 터미널용 ResumePlan 빌더.
+/// args_template 안의 {cwd} {id} {flags} {claude_invoke} 토큰을 치환.
+/// 인자는 공백으로 분리(따옴표로 묶인 부분 보존).
+pub fn build_custom_resume_command(
+    program: &str,
+    args_template: &str,
+    session_id: &str,
+    cwd: Option<&str>,
+    flags: Option<&str>,
+) -> ResumePlan {
+    let work_dir = cwd.filter(|p| Path::new(p).exists()).unwrap_or("");
+    let flags_str = flags.map(|s| s.trim()).filter(|s| !s.is_empty()).unwrap_or("");
+    let claude_invoke = if flags_str.is_empty() {
+        format!("claude --resume {}", session_id)
+    } else {
+        format!("claude {} --resume {}", flags_str, session_id)
+    };
+
+    let substituted = args_template
+        .replace("{cwd}", work_dir)
+        .replace("{id}", session_id)
+        .replace("{flags}", flags_str)
+        .replace("{claude_invoke}", &claude_invoke);
+
+    let args = split_args(&substituted);
+    ResumePlan {
+        program: program.to_string(),
+        args,
+    }
+}
+
+fn split_args(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut in_dq = false;
+    let mut in_sq = false;
+    for c in s.chars() {
+        match c {
+            '"' if !in_sq => in_dq = !in_dq,
+            '\'' if !in_dq => in_sq = !in_sq,
+            ' ' | '\t' if !in_dq && !in_sq => {
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+            }
+            _ => cur.push(c),
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
 }

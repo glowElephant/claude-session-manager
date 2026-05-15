@@ -8,15 +8,20 @@ Built with **Tauri 2 + React + TypeScript + Tailwind + shadcn/ui**. Modern dark 
 
 ## Features
 
-- **Session list** — All sessions in `~/.claude/projects/` shown with name, description, project, last activity, size, storage type
-- **Search & filter** — Instant search across name / description / project / first message
-- **Quick resume** — Double-click a row or hit the action menu to open the session in a new terminal (Git Bash on Windows, Terminal on macOS, configurable on Linux)
-- **Rename / describe** — Custom names and descriptions persist to `~/.claude-sessions/config.json`
-- **Auto-summary** — 1-line summaries via Claude Haiku (cached — generated only once)
-- **Cloud sync** — Point at any cloud-synced folder (Google Drive / OneDrive / Dropbox / iCloud / …). Upload + checkout/checkin pattern keeps the source of truth in sync
-- **i18n** — English and Korean, auto-detected, overridable in Settings (live switch — no restart)
-- **Multi-terminal support (Windows)** — auto-detects Git Bash, Windows Terminal, PowerShell, and cmd. Pick a default in Settings or let the app choose
-- **Environment diagnostics** — Settings → Run diagnostics shows which `claude` CLI / terminals were found and where
+- **세션 목록** — `~/.claude/projects/` 아래 모든 세션 표시 (이름·설명·프로젝트·마지막 활동·크기·저장 위치)
+- **즐겨찾기** — 별 아이콘 토글로 최상단 고정
+- **이름/ID 분리** — 사용자 이름이 없으면 "이름 없음" 회색 표시, ID는 항상 별도 컬럼
+- **자동 요약 + 이름 생성** — 백그라운드에서 `claude -p --model claude-haiku-4-5` subprocess로 호출, 5개씩 배치로 처리해 빈 description 자동 채움 (API 키 불필요 — claude CLI 자체 인증 사용)
+- **무한 루프 방지** — 요약용 호출은 격리 cwd에서 실행, scanner가 격리 폴더 자동 skip
+- **빠른 resume** — 더블클릭 또는 "..." 메뉴로 새 터미널에 세션 이어가기. Git Bash / Windows Terminal / PowerShell / cmd / Terminal.app / Custom(자유 입력)
+- **Resume 플래그** — `--dangerously-skip-permissions` / `--debug` / `--verbose` 체크박스 + 자유 입력란. 실시간 미리보기
+- **이름 변경 / 설명 편집** — `~/.claude-sessions/config.json`에 영구 저장
+- **클라우드 동기화** — Google Drive 데스크탑 자동 감지(클릭 한 번), 업로드 후 로컬 jsonl 자동 삭제 (single source of truth), 락 파일로 다중 PC 동시 편집 방지
+- **컬럼 폭 드래그 조절** — 헤더 핸들 드래그 + `localStorage` 보존
+- **호버 툴팁** — 잘린 셀에 마우스 호버 시 전체 내용 표시
+- **검색 & 필터** — 이름 / 설명 / 프로젝트 / 첫 메시지 즉시 검색
+- **i18n** — 영어 · 한국어 자동 감지, 설정에서 변경 가능 (재시작 불필요)
+- **환경 진단** — 설정 → 진단 실행으로 `claude` CLI / 터미널 감지 결과 확인
 
 ## Install
 

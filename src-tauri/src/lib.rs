@@ -16,6 +16,84 @@ fn to_str<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
+use std::sync::atomic::{AtomicBool, Ordering};
+static AUTO_SUMMARY_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// 빈 description 세션을 1개씩 순차 자동 요약하는 백그라운드 워커.
+/// 이미 실행 중이면 no-op.
+#[tauri::command]
+fn start_auto_summary(app: tauri::AppHandle) -> Result<bool, String> {
+    if AUTO_SUMMARY_RUNNING.swap(true, Ordering::SeqCst) {
+        return Ok(false);
+    }
+    const BATCH_SIZE: usize = 5;
+    std::thread::spawn(move || {
+        use tauri::Emitter;
+        loop {
+            let sessions = match scanner::scan_local_sessions() {
+                Ok(s) => s,
+                Err(_) => break,
+            };
+            let pending: Vec<(String, String)> = sessions
+                .into_iter()
+                .filter(|s| {
+                    s.description.as_deref().unwrap_or("").is_empty()
+                        && s.auto_summary.as_deref().unwrap_or("").is_empty()
+                })
+                .take(BATCH_SIZE)
+                .map(|s| (s.session_id, s.file_path))
+                .collect();
+            if pending.is_empty() {
+                break;
+            }
+
+            match summary::auto_summarize_batch(&pending) {
+                Ok(result) => {
+                    for (id, _path) in &pending {
+                        if let Some((name, desc)) = result.get(id) {
+                            let _ = upsert_session_meta(
+                                id,
+                                SessionMeta {
+                                    name: Some(name.clone()),
+                                    auto_summary: Some(desc.clone()),
+                                    ..Default::default()
+                                },
+                            );
+                            let _ = app.emit("auto-summary-progress", id);
+                        } else {
+                            // 이 배치에서 누락 — 다음 루프에서 또 시도되니 그냥 두지만,
+                            // 무한 재시도 방지 위해 1회 미스 마커 저장
+                            let _ = upsert_session_meta(
+                                id,
+                                SessionMeta {
+                                    auto_summary: Some("(요약 누락 — 재시도 예정)".into()),
+                                    ..Default::default()
+                                },
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[auto-summary batch] 실패: {}", e);
+                    // 배치 전체 실패 시 첫 세션에만 실패 마커 (무한 재시도 방지)
+                    if let Some((id, _)) = pending.first() {
+                        let _ = upsert_session_meta(
+                            id,
+                            SessionMeta {
+                                auto_summary: Some(format!("(자동 요약 실패: {})", e)),
+                                ..Default::default()
+                            },
+                        );
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+        AUTO_SUMMARY_RUNNING.store(false, Ordering::SeqCst);
+    });
+    Ok(true)
+}
+
 #[tauri::command]
 fn list_sessions() -> Result<Vec<Session>, String> {
     let mut local = scanner::scan_local_sessions().map_err(to_str)?;
@@ -57,6 +135,20 @@ fn set_cloud_folder(root: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn detect_google_drive_cmd() -> cloud::CloudDetectResult {
+    cloud::detect_google_drive_result()
+}
+
+#[tauri::command]
+fn connect_google_drive_cmd() -> Result<String, String> {
+    let p = cloud::detect_google_drive()
+        .ok_or_else(|| "Google Drive 폴더를 찾지 못했어요. 데스크탑 클라이언트가 설치돼 있나요?".to_string())?;
+    cloud::set_cloud_root(&p.to_string_lossy())
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(to_str)
+}
+
+#[tauri::command]
 fn upload_to_cloud(session: Session) -> Result<(), String> {
     cloud::upload_session(&session).map_err(to_str)
 }
@@ -87,25 +179,29 @@ async fn generate_summary_cmd(
     file_path: String,
 ) -> Result<String, String> {
     let cfg = load_config();
-    let key = cfg
-        .settings
-        .anthropic_api_key
-        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-        .ok_or_else(|| "ANTHROPIC_API_KEY not configured".to_string())?;
+    let prev = cfg
+        .sessions
+        .get(&session_id)
+        .and_then(|m| m.description.clone().or(m.auto_summary.clone()));
 
-    let msgs = scanner::get_session_messages(&file_path, 5).map_err(to_str)?;
-    let summary = summary::generate_summary(&key, &msgs).await.map_err(to_str)?;
+    let (name, desc) = tokio::task::spawn_blocking(move || {
+        summary::auto_summarize_session(&file_path, prev.as_deref())
+    })
+    .await
+    .map_err(to_str)?
+    .map_err(to_str)?;
 
     upsert_session_meta(
         &session_id,
         SessionMeta {
-            auto_summary: Some(summary.clone()),
+            name: Some(name.clone()),
+            auto_summary: Some(desc.clone()),
             ..Default::default()
         },
     )
     .map_err(to_str)?;
 
-    Ok(summary)
+    Ok(desc)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -127,6 +223,9 @@ pub fn run() {
             resume_session,
             check_environment_cmd,
             generate_summary_cmd,
+            start_auto_summary,
+            detect_google_drive_cmd,
+            connect_google_drive_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

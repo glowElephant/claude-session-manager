@@ -14,6 +14,7 @@ export interface Session {
   version: string | null;
   firstUserMessage: string | null;
   storageType: string;
+  favorite: boolean;
 }
 
 export interface SessionMeta {
@@ -22,6 +23,7 @@ export interface SessionMeta {
   autoSummary?: string | null;
   storageType?: string | null;
   updatedAt?: string | null;
+  favorite?: boolean | null;
 }
 
 export interface Settings {
@@ -29,6 +31,9 @@ export interface Settings {
   cloudPath?: string | null;
   anthropicApiKey?: string | null;
   preferredTerminal?: TerminalKind | "auto" | string | null;
+  resumeFlags?: string | null;
+  customTerminalProgram?: string | null;
+  customTerminalArgs?: string | null;
 }
 
 export type TerminalKind =
@@ -37,7 +42,8 @@ export type TerminalKind =
   | "powershell"
   | "cmd"
   | "terminal"
-  | "linux-default";
+  | "linux-default"
+  | "custom";
 
 export interface DetectedTerminal {
   kind: TerminalKind;

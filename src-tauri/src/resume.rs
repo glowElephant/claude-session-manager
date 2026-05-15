@@ -1,7 +1,7 @@
 use crate::config::load_config;
 use crate::terminal::{
-    build_resume_command, detect_all_terminals, pick_terminal, DetectedTerminal, ResumePlan,
-    TerminalKind,
+    build_custom_resume_command, build_resume_command, detect_all_terminals, pick_terminal,
+    DetectedTerminal, ResumePlan, TerminalKind,
 };
 use anyhow::{anyhow, Result};
 use std::process::Command;
@@ -17,7 +17,28 @@ pub fn current_target_os() -> &'static str {
 }
 
 pub fn build_resume_plan(session_id: &str, cwd: Option<&str>, target_os: &str) -> ResumePlan {
-    let preferred = load_config().settings.preferred_terminal;
+    let settings = load_config().settings;
+    let preferred = settings.preferred_terminal.clone();
+    let flags = settings.resume_flags.clone();
+
+    // Custom 터미널 우선 처리
+    if preferred.as_deref() == Some("custom") {
+        if let (Some(program), Some(args_tpl)) = (
+            settings.custom_terminal_program.as_deref(),
+            settings.custom_terminal_args.as_deref(),
+        ) {
+            if !program.trim().is_empty() {
+                return build_custom_resume_command(
+                    program,
+                    args_tpl,
+                    session_id,
+                    cwd,
+                    flags.as_deref(),
+                );
+            }
+        }
+    }
+
     let term = pick_terminal(target_os, preferred.as_deref()).unwrap_or_else(|| {
         // Pick a sensible non-detecting fallback so we still emit a plan even
         // when no real terminal is installed (mostly relevant in tests).
@@ -33,7 +54,7 @@ pub fn build_resume_plan(session_id: &str, cwd: Option<&str>, target_os: &str) -
         };
         DetectedTerminal { kind, program, display_name: kind.display_name().into() }
     });
-    build_resume_command(&term, session_id, cwd)
+    build_resume_command(&term, session_id, cwd, flags.as_deref())
 }
 
 pub fn resume_in_new_terminal(session_id: &str, cwd: Option<&str>) -> Result<()> {

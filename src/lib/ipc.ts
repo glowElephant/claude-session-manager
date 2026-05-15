@@ -28,4 +28,7 @@ export const ipc = {
   generateSummary: (sessionId: string, filePath: string) =>
     invoke<string>("generate_summary_cmd", { sessionId, filePath }),
   checkEnvironment: () => invoke<EnvironmentReport>("check_environment_cmd"),
+  startAutoSummary: () => invoke<boolean>("start_auto_summary"),
+  detectGoogleDrive: () => invoke<{ found: boolean; path: string | null }>("detect_google_drive_cmd"),
+  connectGoogleDrive: () => invoke<string>("connect_google_drive_cmd"),
 };
